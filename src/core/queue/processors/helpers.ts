@@ -55,7 +55,15 @@ export async function withJobLifecycle(
     if (isFinalAttempt) {
       jobDoc.status = "failed";
       jobDoc.error = err instanceof Error ? err.message : String(err);
-      await jobDoc.save();
+      try {
+        await jobDoc.save();
+      } catch (saveErr) {
+        // If persisting "failed" itself throws (e.g. a schema bug — this exact scenario happened
+        // live with a wrongly `required` payload field), the job doc would otherwise stay stuck at
+        // "queued"/"running" forever with no trace of why, since the original `err` below still gets
+        // thrown but nothing ever recorded it against the job the UI is polling. Log it loudly instead.
+        console.error(`[queue] failed to persist "failed" status for job ${jobDoc._id}:`, saveErr);
+      }
     }
     throw err; // rethrow so BullMQ's own attempts/backoff bookkeeping still applies
   }
