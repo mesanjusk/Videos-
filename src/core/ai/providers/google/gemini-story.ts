@@ -51,7 +51,7 @@ export class GeminiStoryProvider implements StoryProvider {
     const client = getGeminiClient(account);
     try {
       const response = await client.models.generateContent({
-        model: process.env.GEMINI_TEXT_MODEL ?? "gemini-2.5-flash",
+        model: process.env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
