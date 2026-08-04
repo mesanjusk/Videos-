@@ -7,6 +7,7 @@ export const JOB_TYPES = [
   "scene_image",
   "scene_video",
   "voice",
+  "lipsync",
   "render",
   "thumbnail",
 ] as const;

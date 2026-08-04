@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Download, Film, Loader2, Music, Sparkles, UploadCloud } from "lucide-react";
+import { Check, Copy, Download, Film, Loader2, Music, Sparkles, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ interface EditPanelProps {
   projectId: string;
   projectStatus: string;
   musicUrl: string | null;
+  suggestedMusicPrompt: string;
   watermarkImageUrl: string | null;
   finalVideoUrl: string | null;
   thumbnailUrl: string | null;
@@ -26,6 +27,7 @@ interface EditPanelProps {
 export function EditPanel({
   projectId,
   musicUrl,
+  suggestedMusicPrompt,
   watermarkImageUrl,
   finalVideoUrl,
   thumbnailUrl,
@@ -37,7 +39,7 @@ export function EditPanel({
 
   return (
     <div className="space-y-6">
-      <MusicCard projectId={projectId} musicUrl={musicUrl} />
+      <MusicCard projectId={projectId} musicUrl={musicUrl} suggestedPrompt={suggestedMusicPrompt} />
       <WatermarkCard projectId={projectId} watermarkImageUrl={watermarkImageUrl} />
       <RenderCard projectId={projectId} finalVideoUrl={finalVideoUrl} onDone={() => router.refresh()} />
       <ThumbnailCard
@@ -52,11 +54,26 @@ export function EditPanel({
   );
 }
 
-function MusicCard({ projectId, musicUrl }: { projectId: string; musicUrl: string | null }) {
+function MusicCard({
+  projectId,
+  musicUrl,
+  suggestedPrompt,
+}: {
+  projectId: string;
+  musicUrl: string | null;
+  suggestedPrompt: string;
+}) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function copyPrompt() {
+    await navigator.clipboard.writeText(suggestedPrompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -121,6 +138,17 @@ function MusicCard({ projectId, musicUrl }: { projectId: string; musicUrl: strin
         </Button>
         <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileChange} />
         {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            No built-in music generator (Suno/Udio have no free API) — paste this into one and upload the result above.
+          </p>
+          <pre className="whitespace-pre-wrap rounded-md bg-muted p-2 text-xs">{suggestedPrompt}</pre>
+          <Button type="button" size="sm" variant="ghost" onClick={copyPrompt}>
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? "Copied" : "Copy prompt"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

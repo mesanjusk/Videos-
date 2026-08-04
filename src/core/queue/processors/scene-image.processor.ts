@@ -11,6 +11,7 @@ import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { advanceScene } from "@/core/queue/orchestrator";
 
 /** PDF Step 4 — Scene Prompt Formula: character reference + background + action + camera + emotion + lighting + style. */
 export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -81,6 +82,8 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
     scene.set("imageStale", false);
     scene.status = "image_ready";
     await scene.save();
+
+    await advanceScene(jobDoc.userId, jobDoc.projectId.toString(), scene._id.toString());
 
     return { assetId: asset._id.toString() };
   });

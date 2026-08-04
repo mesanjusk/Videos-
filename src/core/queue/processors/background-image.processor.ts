@@ -9,6 +9,7 @@ import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
 
 /** PDF Step 3 — Create Backgrounds. */
 export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
@@ -62,6 +63,8 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
 
     background.assetId = asset._id;
     await background.save();
+
+    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
 
     return { assetId: asset._id.toString() };
   });

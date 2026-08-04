@@ -23,6 +23,9 @@ export interface ComposeScene {
   videoUrl: string;
   voiceUrl?: string;
   dialogue?: string;
+  /** True when `videoUrl` is a lip-synced clip (PDF Step 7) whose own audio track already has the
+   * narration baked in — mix that in directly instead of overlaying a separate `voiceUrl` track. */
+  useEmbeddedAudio?: boolean;
 }
 
 export interface ComposeInput {
@@ -75,13 +78,17 @@ export async function composeVideo(input: ComposeInput): Promise<ComposeResult> 
 
   try {
     const clipPaths = input.scenes.map((_, i) => path.join(workDir, `clip${i}.mp4`));
-    const voicePaths: (string | null)[] = input.scenes.map((s, i) => (s.voiceUrl ? path.join(workDir, `voice${i}.mp3`) : null));
+    // A lip-synced clip's own audio track already has the narration baked in — downloading and
+    // mixing a separate voice track for it too would double up the dialogue.
+    const voicePaths: (string | null)[] = input.scenes.map((s, i) =>
+      s.voiceUrl && !s.useEmbeddedAudio ? path.join(workDir, `voice${i}.mp3`) : null,
+    );
     const musicPath = input.musicUrl ? path.join(workDir, "music.mp3") : null;
     const watermarkPath = input.watermarkUrl ? path.join(workDir, "watermark.png") : null;
 
     await Promise.all([
       ...input.scenes.map((s, i) => downloadTo(s.videoUrl, clipPaths[i]!)),
-      ...input.scenes.map((s, i) => (s.voiceUrl ? downloadTo(s.voiceUrl, voicePaths[i]!) : Promise.resolve())),
+      ...input.scenes.map((s, i) => (voicePaths[i] ? downloadTo(s.voiceUrl!, voicePaths[i]!) : Promise.resolve())),
       input.musicUrl ? downloadTo(input.musicUrl, musicPath!) : Promise.resolve(),
       input.watermarkUrl ? downloadTo(input.watermarkUrl, watermarkPath!) : Promise.resolve(),
     ]);
@@ -155,10 +162,13 @@ export async function composeVideo(input: ComposeInput): Promise<ComposeResult> 
       }
     }
 
-    // Per-clip narration audio: the scene's voice track if present, otherwise exact silence — kept
-    // the same length as the clip so the acrossfade chain below stays in sync with the video xfades.
+    // Per-clip narration audio: the lip-synced clip's own embedded audio if it has one, else the
+    // scene's separate voice track if present, otherwise exact silence — kept the same length as
+    // the clip so the acrossfade chain below stays in sync with the video xfades.
     input.scenes.forEach((s, i) => {
-      if (voicePaths[i]) {
+      if (s.useEmbeddedAudio) {
+        filter += `[${i}:a]atrim=duration=${durations[i]},apad=whole_dur=${durations[i]}[n${i}];\n`;
+      } else if (voicePaths[i]) {
         const vi = voiceInputIndex[i];
         filter += `[${vi}:a]atrim=duration=${durations[i]},apad=whole_dur=${durations[i]}[n${i}];\n`;
       } else {

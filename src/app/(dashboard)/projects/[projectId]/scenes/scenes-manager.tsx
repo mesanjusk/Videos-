@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Reorder, useDragControls } from "framer-motion";
 import {
   AlertTriangle,
+  AudioLines,
   Camera,
   Check,
   Copy,
@@ -44,12 +45,16 @@ export interface SceneListItem {
   imageUrl: string | null;
   videoUrl: string | null;
   voiceUrl: string | null;
+  lipSyncUrl: string | null;
   videoTaskId: string | null;
+  lipSyncTaskId: string | null;
   pendingVideoPrompt: string | null;
   pendingVideoInstructions: string | null;
+  pendingLipSyncInstructions: string | null;
   imageStale: boolean;
   videoStale: boolean;
   voiceStale: boolean;
+  lipSyncStale: boolean;
 }
 
 interface CharacterOption {
@@ -138,9 +143,12 @@ function SceneCard({
   const [imageJobId, setImageJobId] = useState<string | null>(null);
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const [voiceJobId, setVoiceJobId] = useState<string | null>(null);
+  const [lipSyncJobId, setLipSyncJobId] = useState<string | null>(null);
+  const [lipSyncError, setLipSyncError] = useState<string | null>(null);
   const imagePoll = useJobPolling(imageJobId);
   const videoPoll = useJobPolling(videoJobId);
   const voicePoll = useJobPolling(voiceJobId);
+  const lipSyncPoll = useJobPolling(lipSyncJobId);
 
   useEffect(() => {
     if (imagePoll.isDone) router.refresh();
@@ -151,6 +159,9 @@ function SceneCard({
   useEffect(() => {
     if (voicePoll.isDone) router.refresh();
   }, [voicePoll.isDone, router]);
+  useEffect(() => {
+    if (lipSyncPoll.isDone) router.refresh();
+  }, [lipSyncPoll.isDone, router]);
 
   const isGeneratingImage = (imageJobId && !imagePoll.isDone) || scene.status === "image_queued";
   const isGeneratingVoice = voiceJobId && !voicePoll.isDone;
@@ -176,6 +187,18 @@ function SceneCard({
     if (res.ok) {
       const { job } = await res.json();
       setVoiceJobId(job._id);
+    }
+  }
+
+  async function generateLipSync() {
+    setLipSyncError(null);
+    const res = await fetch(`/api/scenes/${scene.id}/lipsync`, { method: "POST" });
+    if (res.ok) {
+      const { job } = await res.json();
+      setLipSyncJobId(job._id);
+    } else {
+      const body = await res.json().catch(() => null);
+      setLipSyncError(body?.error ?? "Couldn't start lip-sync generation");
     }
   }
 
@@ -230,6 +253,9 @@ function SceneCard({
   }
 
   const showVideoHandoff = scene.status === "video_pending_manual" && scene.pendingVideoPrompt;
+  const showLipSyncHandoff = scene.status === "lipsync_pending_manual" && scene.pendingLipSyncInstructions;
+  const canLipSync = !!scene.videoUrl && !!scene.voiceUrl && !scene.videoStale && !scene.voiceStale;
+  const isLipSyncing = lipSyncJobId && !lipSyncPoll.isDone;
   const selectedCharacters = characterOptions.filter((c) => scene.characterIds.includes(c.id));
 
   return (
@@ -437,6 +463,32 @@ function SceneCard({
           </div>
         )}
 
+        {scene.dialogue.trim() && canLipSync && !showLipSyncHandoff && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Lip sync</p>
+              {scene.lipSyncStale && <StaleBadge />}
+            </div>
+            {scene.lipSyncUrl && <video src={scene.lipSyncUrl} controls className="aspect-[4/5] w-full max-w-xs rounded-lg bg-black object-cover" />}
+            <Button size="sm" variant="outline" onClick={generateLipSync} disabled={!!isLipSyncing}>
+              {isLipSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <AudioLines className="h-4 w-4" />}
+              {scene.lipSyncUrl ? "Regenerate lip sync" : "Sync voice to video"}
+            </Button>
+            {lipSyncError && <p className="text-xs text-destructive">{lipSyncError}</p>}
+            {lipSyncPoll.job?.status === "failed" && <p className="text-xs text-destructive">{lipSyncPoll.job.error}</p>}
+          </div>
+        )}
+
+        {showLipSyncHandoff && (
+          <LipSyncHandoffPanel
+            sceneId={scene.id}
+            taskId={scene.lipSyncTaskId!}
+            instructions={scene.pendingLipSyncInstructions ?? ""}
+            videoUrl={scene.videoUrl!}
+            voiceUrl={scene.voiceUrl!}
+          />
+        )}
+
         {showVideoHandoff && (
           <VideoHandoffPanel
             sceneId={scene.id}
@@ -558,6 +610,101 @@ function VideoHandoffPanel({
         <Button type="button" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
           {uploading ? "Uploading..." : "Upload the clip"}
+        </Button>
+        <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function LipSyncHandoffPanel({
+  sceneId,
+  taskId,
+  instructions,
+  videoUrl,
+  voiceUrl,
+}: {
+  sceneId: string;
+  taskId: string;
+  instructions: string;
+  videoUrl: string;
+  voiceUrl: string;
+}) {
+  const router = useRouter();
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const paramsRes = await fetch(`/api/scenes/${sceneId}/lipsync/upload-params`);
+      if (!paramsRes.ok) throw new Error("Couldn't prepare the upload");
+      const { timestamp, folder, signature, apiKey, cloudName } = await paramsRes.json();
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("api_key", apiKey);
+      formData.append("timestamp", String(timestamp));
+      formData.append("signature", signature);
+      formData.append("folder", folder);
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Upload to storage failed");
+      const uploaded = await uploadRes.json();
+
+      const completeRes = await fetch(`/api/scenes/${sceneId}/lipsync/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId,
+          url: uploaded.secure_url,
+          publicId: uploaded.public_id,
+          durationSeconds: uploaded.duration ?? 8,
+          bytes: uploaded.bytes,
+        }),
+      });
+      if (!completeRes.ok) throw new Error("Couldn't save the lip-synced clip");
+
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4">
+      <p className="text-sm font-medium">One manual step: sync the voice to the video in Hedra, HeyGen, or Kling Lip Sync</p>
+      <p className="text-xs text-muted-foreground">{instructions}</p>
+
+      <div className="flex flex-wrap gap-3 text-xs">
+        <a href={videoUrl} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
+          Download video clip
+        </a>
+        <a href={voiceUrl} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
+          Download voice audio
+        </a>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <a href="https://www.hedra.com" target="_blank" rel="noreferrer" className="text-sm text-primary underline-offset-2 hover:underline">
+          Open Hedra
+        </a>
+        <a href="https://www.heygen.com" target="_blank" rel="noreferrer" className="text-sm text-primary underline-offset-2 hover:underline">
+          Open HeyGen
+        </a>
+        <Button type="button" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading ? "Uploading..." : "Upload the synced clip"}
         </Button>
         <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
       </div>

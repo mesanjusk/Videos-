@@ -1,6 +1,6 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
-const PROMPT_SCOPES = ["story", "character", "background", "scene_image", "scene_video", "voice", "thumbnail"] as const;
+const PROMPT_SCOPES = ["story", "character", "background", "scene_image", "scene_video", "voice", "thumbnail", "music"] as const;
 
 const promptTemplateSchema = new Schema(
   {

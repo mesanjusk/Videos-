@@ -5,7 +5,8 @@ export type PromptScope =
   | "scene_image"
   | "scene_video"
   | "voice"
-  | "thumbnail";
+  | "thumbnail"
+  | "music";
 
 /** A template string with `{{variable}}` placeholders, optionally including the shared consistency partial. */
 export interface PromptTemplateDefinition {

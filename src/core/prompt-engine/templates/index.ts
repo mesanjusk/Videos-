@@ -5,6 +5,7 @@ import { sceneImageTemplate } from "./scene-image";
 import { sceneVideoTemplate } from "./scene-video";
 import { voiceTemplate } from "./voice";
 import { thumbnailTemplate } from "./thumbnail";
+import { musicTemplate } from "./music";
 import type { PromptTemplateDefinition } from "../types";
 
 export {
@@ -15,6 +16,7 @@ export {
   sceneVideoTemplate,
   voiceTemplate,
   thumbnailTemplate,
+  musicTemplate,
 };
 
 /** All built-in defaults, seeded into `PromptTemplate` documents for a user on first use. */
@@ -26,4 +28,5 @@ export const defaultPromptTemplates: PromptTemplateDefinition[] = [
   sceneVideoTemplate,
   voiceTemplate,
   thumbnailTemplate,
+  musicTemplate,
 ];

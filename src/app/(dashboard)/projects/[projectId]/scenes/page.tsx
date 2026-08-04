@@ -32,12 +32,16 @@ export default async function ScenesPage({ params }: { params: Promise<{ project
     imageUrl: s.imageAssetId && typeof s.imageAssetId === "object" ? (s.imageAssetId as unknown as { url: string }).url : null,
     videoUrl: s.videoAssetId && typeof s.videoAssetId === "object" ? (s.videoAssetId as unknown as { url: string }).url : null,
     voiceUrl: s.voiceAssetId && typeof s.voiceAssetId === "object" ? (s.voiceAssetId as unknown as { url: string }).url : null,
+    lipSyncUrl: s.lipSyncAssetId && typeof s.lipSyncAssetId === "object" ? (s.lipSyncAssetId as unknown as { url: string }).url : null,
     videoTaskId: s.videoTaskId ?? null,
+    lipSyncTaskId: s.lipSyncTaskId ?? null,
     pendingVideoPrompt: s.pendingVideoPrompt ?? null,
     pendingVideoInstructions: s.pendingVideoInstructions ?? null,
+    pendingLipSyncInstructions: s.pendingLipSyncInstructions ?? null,
     imageStale: s.imageStale ?? false,
     videoStale: s.videoStale ?? false,
     voiceStale: s.voiceStale ?? false,
+    lipSyncStale: s.lipSyncStale ?? false,
   }));
 
   const characterOptions = characters.map((c) => ({

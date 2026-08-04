@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUserId, UnauthorizedError } from "@/core/auth/session";
-import { updateTemplateText } from "@/modules/prompt-templates/service";
+import { deleteTemplate, updateTemplateText } from "@/modules/prompt-templates/service";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +23,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (err) {
     if (err instanceof UnauthorizedError) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     return NextResponse.json({ error: "Failed to update template" }, { status: 500 });
+  }
+}
+
+/** Deletes a saved preset. The active (`isDefault`) preset in a scope can't be deleted — activate another one first. */
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const userId = await requireUserId();
+    const { id } = await params;
+    const result = await deleteTemplate(userId, id);
+    if (!result.ok) {
+      const status = result.error === "not_found" ? 404 : 409;
+      return NextResponse.json({ error: result.error }, { status });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof UnauthorizedError) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Failed to delete preset" }, { status: 500 });
   }
 }

@@ -8,6 +8,8 @@ export const SCENE_STATUSES = [
   "video_ready",
   "voice_queued",
   "voice_ready",
+  "lipsync_pending_manual",
+  "lipsync_ready",
   "complete",
   "failed",
 ] as const;
@@ -27,11 +29,16 @@ const sceneSchema = new Schema(
     imageAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     videoAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     voiceAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
+    // The lip-synced clip (PDF Step 7) — a new asset separate from videoAssetId, since the source
+    // clip + voice track are kept too (re-running lip sync doesn't require regenerating either).
+    lipSyncAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     videoTaskId: { type: String }, // manual hand-off task id (Google Flow), see core/ai VideoProvider
+    lipSyncTaskId: { type: String }, // manual hand-off task id (Hedra/HeyGen/Kling), see core/ai LipSyncProvider
     // Denormalized copy of the manual hand-off prompt so the Scene Manager can render it after a
     // page reload without re-fetching the originating Job (ARCHITECTURE.md §2).
     pendingVideoPrompt: { type: String },
     pendingVideoInstructions: { type: String },
+    pendingLipSyncInstructions: { type: String },
     status: { type: String, enum: SCENE_STATUSES, default: "pending", index: true },
     failureReason: { type: String },
     // Set when an editable field this asset depends on changes after the asset was generated
@@ -40,6 +47,7 @@ const sceneSchema = new Schema(
     imageStale: { type: Boolean, default: false },
     videoStale: { type: Boolean, default: false },
     voiceStale: { type: Boolean, default: false },
+    lipSyncStale: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

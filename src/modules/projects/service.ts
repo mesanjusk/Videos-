@@ -92,3 +92,8 @@ export async function setWatermarkUrl(userId: string, projectId: string, waterma
     { new: true },
   );
 }
+
+export async function setPipelineMode(userId: string, projectId: string, pipelineMode: "full" | "semi" | "manual") {
+  await connectToDatabase();
+  return Project.findOneAndUpdate({ _id: projectId, userId }, { $set: { pipelineMode } }, { new: true });
+}

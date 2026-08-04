@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUserId, UnauthorizedError } from "@/core/auth/session";
-import { deleteProject, getProject, setWatermarkUrl } from "@/modules/projects/service";
+import { deleteProject, getProject, setPipelineMode, setWatermarkUrl } from "@/modules/projects/service";
 
 export const dynamic = "force-dynamic";
 
-const patchSchema = z.object({
-  watermarkImageUrl: z.string().url().nullable(),
-});
+const patchSchema = z.union([
+  z.object({ watermarkImageUrl: z.string().url().nullable() }),
+  z.object({ pipelineMode: z.enum(["full", "semi", "manual"]) }),
+]);
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -30,7 +31,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Invalid input", issues: parsed.error.flatten() }, { status: 400 });
 
-    const project = await setWatermarkUrl(userId, id, parsed.data.watermarkImageUrl);
+    const project =
+      "watermarkImageUrl" in parsed.data
+        ? await setWatermarkUrl(userId, id, parsed.data.watermarkImageUrl)
+        : await setPipelineMode(userId, id, parsed.data.pipelineMode);
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ project });
   } catch (err) {
