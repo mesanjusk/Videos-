@@ -89,11 +89,11 @@ export default async function DashboardPage() {
                   const next = nextActionForStatus(project.status ?? "draft");
                   return (
                     <li key={project._id.toString()} className="flex items-center justify-between gap-4 py-3">
-                      <div className="min-w-0">
+                      <Link href={`/projects/${project._id.toString()}`} className="min-w-0 hover:underline">
                         <p className="truncate font-medium">{project.title}</p>
                         <p className="text-xs text-muted-foreground">{project.style} · {project.targetPlatform}</p>
                         <Progress value={project.completionPercent ?? 0} className="mt-2 h-1.5 w-40" />
-                      </div>
+                      </Link>
                       <Button asChild variant="outline" size="sm" className="shrink-0">
                         <Link href={next.href(project._id.toString())}>{next.label}</Link>
                       </Button>
