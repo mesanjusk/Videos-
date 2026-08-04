@@ -26,10 +26,18 @@ function requireServerKey(): string {
   return key;
 }
 
-/** Normalizes Gemini SDK quota/rate errors into the provider-agnostic error type. */
+/**
+ * Normalizes Gemini SDK quota/rate errors into the provider-agnostic error type. Logs the raw SDK
+ * message before discarding it — ProviderQuotaExceededError's own message is a generic
+ * "quota exceeded" with no detail, so without this log there's no way to tell a real free-tier
+ * exhaustion apart from, say, a per-minute rate limit or something else entirely that merely
+ * happens to match this regex (it's deliberately broad: "quota", "rate limit", "429",
+ * "RESOURCE_EXHAUSTED").
+ */
 export function wrapGeminiError(providerId: string, err: unknown): never {
   const message = err instanceof Error ? err.message : String(err);
   if (/quota|rate.?limit|429|RESOURCE_EXHAUSTED/i.test(message)) {
+    console.error(`[gemini] ${providerId} call rejected, raw SDK message: ${message}`);
     throw new ProviderQuotaExceededError(providerId);
   }
   throw err instanceof Error ? err : new Error(message);
