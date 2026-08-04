@@ -41,11 +41,17 @@ export async function enqueueJob(input: EnqueueJobInput) {
   jobDoc.bullJobId = bullJob.id;
   await jobDoc.save();
 
-  after(() =>
-    runQueueTick().catch(() => {
-      // best-effort only — the Vercel Cron backstop will pick this job up regardless
-    }),
-  );
+  after(() => {
+    console.log(`[queue] in-process tick starting after enqueueing ${input.type} job ${jobDoc._id}`);
+    return runQueueTick()
+      .then((result) => {
+        console.log(`[queue] in-process tick finished, ran worker types: ${result.types.join(", ")}`);
+      })
+      .catch((err) => {
+        // Logged, not rethrown — the Vercel Cron backstop will pick this job up regardless.
+        console.error("[queue] in-process tick failed:", err);
+      });
+  });
   return jobDoc;
 }
 
