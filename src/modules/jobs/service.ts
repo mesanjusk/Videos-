@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { connectToDatabase } from "@/core/db/mongoose";
 import { Job, type JobStatus, type JobType } from "./models/Job";
 import { getQueue } from "@/core/queue/queues";
+import { runQueueTick } from "@/core/queue/worker-runtime";
 
 export interface EnqueueJobInput {
   userId: string;
@@ -13,9 +15,14 @@ export interface EnqueueJobInput {
 
 /**
  * Creates the Mongo `Job` record (source of truth for status/progress the UI polls) and adds the
- * matching BullMQ job (the actual work queue). Fires a best-effort, non-blocking self-call to
- * /api/queue/tick so the job usually starts within a second or two rather than waiting for the
- * next cron tick (ARCHITECTURE.md §7) — failures there are silently ignored, the cron is the backstop.
+ * matching BullMQ job (the actual work queue). Runs a queue tick in-process via `after()` once the
+ * response has been sent, so the job usually starts within a second or two rather than waiting for
+ * the next cron tick (ARCHITECTURE.md §7). This used to be a fire-and-forget self-HTTP-call to
+ * /api/queue/tick, but that made "start processing now" depend on NEXTAUTH_URL and CRON_SECRET
+ * matching exactly in every environment — a single 401 there (confirmed live) left jobs stuck queued
+ * for up to a day, since Vercel Hobby only allows a once-daily cron backstop. Calling runQueueTick()
+ * directly removes the network round-trip and the auth dependency entirely. The Vercel Cron backstop
+ * still hits /api/queue/tick over HTTP (it has to — cron calls a URL), unaffected by this change.
  */
 export async function enqueueJob(input: EnqueueJobInput) {
   await connectToDatabase();
@@ -34,20 +41,12 @@ export async function enqueueJob(input: EnqueueJobInput) {
   jobDoc.bullJobId = bullJob.id;
   await jobDoc.save();
 
-  triggerQueueTick();
+  after(() =>
+    runQueueTick().catch(() => {
+      // best-effort only — the Vercel Cron backstop will pick this job up regardless
+    }),
+  );
   return jobDoc;
-}
-
-function triggerQueueTick(): void {
-  const base = process.env.NEXTAUTH_URL;
-  const secret = process.env.CRON_SECRET;
-  if (!base || !secret) return;
-  fetch(new URL("/api/queue/tick", base), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${secret}` },
-  }).catch(() => {
-    // best-effort only — the Vercel Cron backstop will pick this job up regardless
-  });
 }
 
 export async function getJob(userId: string, jobId: string) {

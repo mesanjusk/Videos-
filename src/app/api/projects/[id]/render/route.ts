@@ -4,6 +4,9 @@ import { getProject } from "@/modules/projects/service";
 import { enqueueJob } from "@/modules/jobs/service";
 
 export const dynamic = "force-dynamic";
+// enqueueJob() runs a queue tick in-process via after() before this function is allowed to freeze —
+// give it the same budget as /api/queue/tick.
+export const maxDuration = 60;
 
 // This route only enqueues — the actual FFmpeg work runs inside /api/queue/tick's bounded worker.
 // Render jobs (downloading every clip + encoding) are the one job type genuinely at risk of

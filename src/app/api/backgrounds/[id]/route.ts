@@ -4,6 +4,9 @@ import { deleteBackground, getBackground } from "@/modules/backgrounds/service";
 import { enqueueJob } from "@/modules/jobs/service";
 
 export const dynamic = "force-dynamic";
+// enqueueJob() (in POST) runs a queue tick in-process via after() before this function is allowed to
+// freeze — give it the same budget as /api/queue/tick.
+export const maxDuration = 60;
 
 /** Regenerate — same background metadata, a fresh image. */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {

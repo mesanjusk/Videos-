@@ -6,6 +6,9 @@ import { createBackgroundSchema } from "@/modules/backgrounds/schema";
 import { enqueueJob } from "@/modules/jobs/service";
 
 export const dynamic = "force-dynamic";
+// enqueueJob() (in POST) runs a queue tick in-process via after() before this function is allowed to
+// freeze — give it the same budget as /api/queue/tick.
+export const maxDuration = 60;
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
