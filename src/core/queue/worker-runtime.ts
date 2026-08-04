@@ -1,6 +1,8 @@
 import { Worker } from "bullmq";
 import { getRedisConnection } from "./connection";
 import { processorRegistry } from "./processors";
+import { getQueue } from "./queues";
+import type { JobType } from "@/modules/jobs/models/Job";
 
 const DEFAULT_BUDGET_MS = Number(process.env.QUEUE_TICK_BUDGET_MS ?? 45_000);
 
@@ -21,7 +23,22 @@ export async function runQueueTick(budgetMs: number = DEFAULT_BUDGET_MS): Promis
     [string, NonNullable<(typeof processorRegistry)[keyof typeof processorRegistry]>]
   >;
 
-  const workers = entries.map(([type, processor]) => new Worker(type, processor, { connection, autorun: false, concurrency: 2 }));
+  const backlog = await Promise.all(
+    entries.map(async ([type]) => {
+      const counts = await getQueue(type as JobType).getJobCounts("wait", "active", "delayed", "failed");
+      return `${type}:${JSON.stringify(counts)}`;
+    }),
+  );
+  console.log(`[queue] backlog at tick start — ${backlog.join(" ")}`);
+
+  const workers = entries.map(([type, processor]) => {
+    const worker = new Worker(type, processor, { connection, autorun: false, concurrency: 2 });
+    worker.on("completed", (job) => console.log(`[queue] ${type} job ${job.id} (mongo ${job.data.jobId}) completed`));
+    worker.on("failed", (job, err) =>
+      console.error(`[queue] ${type} job ${job?.id} (mongo ${job?.data.jobId}) failed:`, err),
+    );
+    return worker;
+  });
   const runPromises = workers.map((w) => w.run());
 
   await sleep(budgetMs);
