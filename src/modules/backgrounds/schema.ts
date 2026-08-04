@@ -9,3 +9,9 @@ export const createBackgroundSchema = z.object({
 });
 
 export type CreateBackgroundInput = z.infer<typeof createBackgroundSchema>;
+
+export const cloneBackgroundSchema = z.object({
+  targetProjectId: z.string().min(1),
+});
+
+export type CloneBackgroundInput = z.infer<typeof cloneBackgroundSchema>;

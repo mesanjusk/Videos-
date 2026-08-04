@@ -15,3 +15,9 @@ export const createCharacterSchema = z.object({
 });
 
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
+
+export const cloneCharacterSchema = z.object({
+  targetProjectId: z.string().min(1),
+});
+
+export type CloneCharacterInput = z.infer<typeof cloneCharacterSchema>;

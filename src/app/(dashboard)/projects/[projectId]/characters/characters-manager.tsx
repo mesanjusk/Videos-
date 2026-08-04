@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, MoreVertical, Plus, RefreshCcw, Users } from "lucide-react";
+import { Loader2, LibraryBig, MoreVertical, Plus, RefreshCcw, Users } from "lucide-react";
 import { createCharacterSchema, type CreateCharacterInput } from "@/modules/characters/schema";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,13 @@ export function CharactersManager({ projectId, initialCharacters }: { projectId:
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" asChild>
+          <Link href={`/library?target=${projectId}`}>
+            <LibraryBig className="h-4 w-4" />
+            Reuse from another project
+          </Link>
+        </Button>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
