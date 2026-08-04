@@ -26,3 +26,13 @@ export const completeSceneVideoUploadSchema = z.object({
 });
 
 export type CompleteSceneVideoUploadInput = z.infer<typeof completeSceneVideoUploadSchema>;
+
+export const completeSceneLipSyncUploadSchema = z.object({
+  taskId: z.string().min(1),
+  url: z.string().url(),
+  publicId: z.string().min(1),
+  durationSeconds: z.number().positive().max(60),
+  bytes: z.number().nonnegative().optional(),
+});
+
+export type CompleteSceneLipSyncUploadInput = z.infer<typeof completeSceneLipSyncUploadSchema>;

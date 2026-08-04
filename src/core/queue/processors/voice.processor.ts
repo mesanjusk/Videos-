@@ -9,6 +9,7 @@ import { getVoiceProvider } from "@/core/ai/registry";
 import { uploadAudioAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { advanceScene } from "@/core/queue/orchestrator";
 
 /** PDF Step 6 — Voice. */
 export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -60,6 +61,8 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
     scene.set("voiceStale", false);
     scene.status = scene.videoAssetId ? "complete" : "voice_ready";
     await scene.save();
+
+    await advanceScene(jobDoc.userId, jobDoc.projectId.toString(), scene._id.toString());
 
     return { assetId: asset._id.toString() };
   });

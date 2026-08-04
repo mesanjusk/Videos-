@@ -6,7 +6,7 @@ import { getOrCreateSettings, setDefaultLanguage, setProviderOverride } from "@/
 export const dynamic = "force-dynamic";
 
 const patchSchema = z.union([
-  z.object({ capability: z.enum(["story", "image", "video", "voice"]), providerId: z.string().min(1) }),
+  z.object({ capability: z.enum(["story", "image", "video", "voice", "lipsync"]), providerId: z.string().min(1) }),
   z.object({ defaultLanguage: z.string().min(2).max(10) }),
 ]);
 

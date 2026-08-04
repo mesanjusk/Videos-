@@ -12,6 +12,7 @@ const CAPABILITIES: { key: AiCapability; label: string }[] = [
   { key: "image", label: "Image (characters, backgrounds, scenes, thumbnail)" },
   { key: "video", label: "Video" },
   { key: "voice", label: "Voice" },
+  { key: "lipsync", label: "Lip sync" },
 ];
 
 export function ProviderSettings({

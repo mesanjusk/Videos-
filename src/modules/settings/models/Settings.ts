@@ -8,6 +8,7 @@ const settingsSchema = new Schema(
       image: { type: String },
       video: { type: String },
       voice: { type: String },
+      lipsync: { type: String },
     },
     theme: { type: String, enum: ["light", "dark", "system"], default: "system" },
     defaultLanguage: { type: String, default: "en" },

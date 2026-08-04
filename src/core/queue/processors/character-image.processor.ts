@@ -10,6 +10,7 @@ import { uploadImageAsset } from "@/core/storage/cloudinary";
 import type { CharacterPose } from "@/core/ai/types";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
 
 const DEFAULT_POSES: CharacterPose[] = ["front-view", "happy", "walking-pose"];
 
@@ -80,6 +81,8 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
 
     character.set("sheetAssets", sheetAssets);
     await character.save();
+
+    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
 
     return { poseCount: sheetAssets.length };
   });

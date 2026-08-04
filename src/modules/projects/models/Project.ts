@@ -36,6 +36,12 @@ const projectSchema = new Schema(
     },
     status: { type: String, enum: PROJECT_STATUSES, default: "draft", index: true },
     completionPercent: { type: Number, default: 0, min: 0, max: 100 },
+    // "full": each step auto-enqueues the next once it can (core/queue/orchestrator.ts) — still stops
+    // at manual hand-offs (video/lip-sync) since neither has a free API to call automatically.
+    // "semi" (default): every step is user-triggered, matching the app's behavior before this field
+    // existed. "manual": same as semi at the queue level — the distinction is in the UI, which leans
+    // on named/reusable Prompt Library presets (modules/prompt-templates) rather than auto-chaining.
+    pipelineMode: { type: String, enum: ["full", "semi", "manual"], default: "semi" },
     // The PDF's Music step (Suno/Udio/Epidemic/Artlist) has no approved-stack replacement — none of
     // those tools are on the allowed list, and no music-generation service is. Rather than silently
     // reaching for a forbidden tool, background music is a user-supplied upload (Cloudinary-stored),

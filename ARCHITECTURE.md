@@ -331,3 +331,41 @@ touching anything above it.
 6. Prompt Library, Settings, polish pass (empty states, skeletons, animations, dark mode).
 
 Each lands as its own reviewable commit on `claude/video-studio-architecture-wruz2h`.
+
+## 12. Automation modes (2026-08 addition)
+
+`Project.pipelineMode` (`"full" | "semi" | "manual"`, default `"semi"`) governs how much of the
+10-step pipeline runs unattended, per the workflow PDF's three usage patterns:
+
+- **Semi** (default, unchanged behavior): every step is user-triggered, same as before this field
+  existed.
+- **Full**: `core/queue/orchestrator.ts` auto-enqueues the next step as soon as its prerequisite
+  exists — scene image → scene video → voice → lip sync → render → thumbnail — and auto-assigns a
+  scene's characters/background (all ready characters + the first ready background, a blunt
+  heuristic, not per-scene curation) the first time material exists. It deliberately never invents a
+  Character/Background from scratch (their spec needs real creative input — age/body/face/clothes —
+  that the story step doesn't produce) and never proceeds past a manual hand-off on its own; the
+  chain resumes automatically once a human completes that upload.
+- **Manual**: identical to semi at the queue level; the distinction is that it leans on named,
+  reusable Prompt Library presets (`modules/prompt-templates`, one `{userId, scope, name}` doc per
+  preset, unique per scope) rather than one-off template edits.
+
+**Lip sync (PDF Step 7)** is now a fourth provider capability (`core/ai/types.ts`'s
+`LipSyncProvider`), following the exact `VideoProvider` manual-hand-off shape: no approved-stack
+provider (Hedra/HeyGen/Kling Lip Sync) has a free API, so `ManualLipSyncProvider` always returns
+`manual_pending` and `POST /api/scenes/:id/lipsync/upload` completes it once a human uploads the
+synced clip. `render.processor.ts` prefers a scene's lip-synced clip over its separate video+voice
+tracks when one exists (`compose.ts`'s `useEmbeddedAudio` — the clip's own audio already has the
+narration baked in).
+
+**Music (PDF Step 8)** gained a `music` prompt-template scope — a copy-pasteable Suno/Udio-style
+prompt shown next to the existing manual upload — but not a provider, since Suno/Udio have no public
+developer API to call.
+
+**Not done in this pass** (explicitly out of scope, needs external setup this deployment doesn't
+have): wiring a real paid API for video (Runway/Kling), lip sync (Hedra/HeyGen), or music generation
+(no free/API-accessible option exists for the last one) — each is a single new file under
+`providers/<vendor>/` plus flipping `enabled: true` on its `FUTURE_PROVIDERS` entry in
+`core/ai/registry.ts` once a key exists; and platform upload/export (YouTube Data API is the only
+one of the three PDF platforms with a free, non-gated upload API, but needs a verified OAuth consent
+screen configured outside this codebase before it can be wired in).

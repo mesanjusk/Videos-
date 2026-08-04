@@ -1,8 +1,17 @@
-import type { AiCapability, ImageProvider, ProviderDescriptor, StoryProvider, VideoProvider, VoiceProvider } from "./types";
+import type {
+  AiCapability,
+  ImageProvider,
+  LipSyncProvider,
+  ProviderDescriptor,
+  StoryProvider,
+  VideoProvider,
+  VoiceProvider,
+} from "./types";
 import { GeminiStoryProvider } from "./providers/google/gemini-story";
 import { GeminiImageProvider } from "./providers/google/gemini-image";
 import { GeminiVoiceProvider } from "./providers/google/gemini-voice";
 import { GoogleFlowVideoProvider } from "./providers/google/google-flow-video";
+import { ManualLipSyncProvider } from "./providers/manual/manual-lipsync";
 
 /**
  * The one and only place that knows concrete provider classes exist.
@@ -27,7 +36,17 @@ const voiceProviders: Record<string, VoiceProvider> = {
   gemini: new GeminiVoiceProvider(),
 };
 
-/** Providers registered but not yet enabled for selection — surfaced in Settings as "coming soon". */
+const lipSyncProviders: Record<string, LipSyncProvider> = {
+  manual: new ManualLipSyncProvider(),
+};
+
+/**
+ * Providers registered but not yet enabled for selection — surfaced in Settings as "coming soon".
+ * Every one of these needs a paid API key this deployment doesn't have configured; wiring the real
+ * HTTP calls in is a one-file addition under `providers/<vendor>/` once that key exists (see
+ * `ManualLipSyncProvider`/`GoogleFlowVideoProvider` for the shape a manual-handoff provider takes,
+ * or `GeminiImageProvider` for a real synchronous one) — flip `enabled: true` here after.
+ */
 export const FUTURE_PROVIDERS: ProviderDescriptor[] = [
   { id: "openai", label: "OpenAI", capability: "story", enabled: false },
   { id: "claude", label: "Anthropic Claude", capability: "story", enabled: false },
@@ -36,6 +55,8 @@ export const FUTURE_PROVIDERS: ProviderDescriptor[] = [
   { id: "kling", label: "Kling", capability: "video", enabled: false },
   { id: "veo-vertex", label: "Veo (Vertex AI)", capability: "video", enabled: false },
   { id: "local", label: "Local model", capability: "image", enabled: false },
+  { id: "hedra", label: "Hedra", capability: "lipsync", enabled: false },
+  { id: "heygen", label: "HeyGen", capability: "lipsync", enabled: false },
 ];
 
 function envDefault(capability: AiCapability): string {
@@ -48,6 +69,8 @@ function envDefault(capability: AiCapability): string {
       return process.env.AI_VIDEO_PROVIDER ?? "google-flow";
     case "voice":
       return process.env.AI_VOICE_PROVIDER ?? "gemini";
+    case "lipsync":
+      return process.env.AI_LIPSYNC_PROVIDER ?? "manual";
   }
 }
 
@@ -79,12 +102,20 @@ export function getVoiceProvider(providerId?: string): VoiceProvider {
   return provider;
 }
 
+export function getLipSyncProvider(providerId?: string): LipSyncProvider {
+  const id = providerId ?? envDefault("lipsync");
+  const provider = lipSyncProviders[id];
+  if (!provider) throw new Error(`Unknown lip-sync provider "${id}"`);
+  return provider;
+}
+
 export function listEnabledProviders(): ProviderDescriptor[] {
   return [
     ...Object.values(storyProviders).map((p) => ({ id: p.id, label: p.label, capability: "story" as const, enabled: true })),
     ...Object.values(imageProviders).map((p) => ({ id: p.id, label: p.label, capability: "image" as const, enabled: true })),
     ...Object.values(videoProviders).map((p) => ({ id: p.id, label: p.label, capability: "video" as const, enabled: true })),
     ...Object.values(voiceProviders).map((p) => ({ id: p.id, label: p.label, capability: "voice" as const, enabled: true })),
+    ...Object.values(lipSyncProviders).map((p) => ({ id: p.id, label: p.label, capability: "lipsync" as const, enabled: true })),
     ...FUTURE_PROVIDERS,
   ];
 }

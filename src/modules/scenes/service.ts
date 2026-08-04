@@ -32,6 +32,7 @@ export async function listScenes(userId: string, projectId: string) {
     .populate("imageAssetId")
     .populate("videoAssetId")
     .populate("voiceAssetId")
+    .populate("lipSyncAssetId")
     .lean();
 }
 
@@ -43,7 +44,7 @@ export async function getScene(userId: string, sceneId: string) {
 export async function updateScene(userId: string, sceneId: string, input: UpdateSceneInput) {
   await connectToDatabase();
   const existing = await Scene.findOne({ _id: sceneId, userId }).select(
-    "imageAssetId videoAssetId voiceAssetId",
+    "imageAssetId videoAssetId voiceAssetId lipSyncAssetId",
   );
   if (!existing) return null;
 
@@ -52,6 +53,7 @@ export async function updateScene(userId: string, sceneId: string, input: Update
   if (!existing.imageAssetId) delete staleFlags.imageStale;
   if (!existing.videoAssetId) delete staleFlags.videoStale;
   if (!existing.voiceAssetId) delete staleFlags.voiceStale;
+  if (!existing.lipSyncAssetId) delete staleFlags.lipSyncStale;
 
   return Scene.findOneAndUpdate({ _id: sceneId, userId }, { $set: { ...input, ...staleFlags } }, { new: true });
 }
@@ -72,7 +74,9 @@ export async function duplicateScene(userId: string, sceneId: string) {
     imageAssetId: undefined,
     videoAssetId: undefined,
     voiceAssetId: undefined,
+    lipSyncAssetId: undefined,
     videoTaskId: undefined,
+    lipSyncTaskId: undefined,
     status: "pending",
   });
 }

@@ -4,6 +4,8 @@ import { getProject } from "@/modules/projects/service";
 import { Asset } from "@/modules/assets/models/Asset";
 import { connectToDatabase } from "@/core/db/mongoose";
 import { HelpButton } from "@/components/shared/help-button";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { renderTemplate } from "@/core/prompt-engine/engine";
 import { EditPanel } from "./edit-panel";
 
 export default async function EditPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -13,11 +15,17 @@ export default async function EditPage({ params }: { params: Promise<{ projectId
   if (!project) notFound();
 
   await connectToDatabase();
-  const [musicAsset, finalVideoAsset, thumbnailAsset] = await Promise.all([
+  const [musicAsset, finalVideoAsset, thumbnailAsset, musicTemplate] = await Promise.all([
     project.musicAssetId ? Asset.findById(project.musicAssetId).lean() : null,
     project.finalVideoAssetId ? Asset.findById(project.finalVideoAssetId).lean() : null,
     project.thumbnailAssetId ? Asset.findById(project.thumbnailAssetId).lean() : null,
+    resolveActiveTemplate(userId, "music"),
   ]);
+  const suggestedMusicPrompt = renderTemplate(musicTemplate, {
+    mood: "Funny, kids, adventure, happy",
+    genre: project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style,
+    language: project.language,
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -29,6 +37,7 @@ export default async function EditPage({ params }: { params: Promise<{ projectId
         projectId={projectId}
         projectStatus={project.status ?? "draft"}
         musicUrl={musicAsset?.url ?? null}
+        suggestedMusicPrompt={suggestedMusicPrompt}
         watermarkImageUrl={project.watermarkImageUrl ?? null}
         finalVideoUrl={finalVideoAsset?.url ?? null}
         thumbnailUrl={thumbnailAsset?.url ?? null}

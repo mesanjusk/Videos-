@@ -209,9 +209,36 @@ export interface VoiceProvider {
   generateVoice(input: VoiceGenerationInput, account?: GenerationAccountContext): Promise<GeneratedVoice>;
 }
 
+// ── Lip sync ─────────────────────────────────────────────────────────────
+
+/** PDF Step 7 — Lip Sync: upload character video + voice audio, generate, download. No prompt text involved. */
+export interface LipSyncGenerationInput {
+  sceneId: string;
+  videoUrl: string;
+  voiceUrl: string;
+}
+
+export type LipSyncGenerationResult =
+  | { status: "completed"; data: Buffer | string; mimeType: string; durationSeconds: number }
+  | {
+      /** No approved-stack provider (Hedra/HeyGen/Kling Lip Sync) has a free/wired API — a human runs it manually. */
+      status: "manual_pending";
+      taskId: string;
+      instructions: string;
+    };
+
+export interface LipSyncProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly requiresManualHandoff: boolean;
+  generateLipSync(input: LipSyncGenerationInput, account?: GenerationAccountContext): Promise<LipSyncGenerationResult>;
+  /** Only implemented by manual-handoff providers; resolves a `manual_pending` task once the clip is uploaded. */
+  completeManualUpload?(taskId: string, uploadedUrl: string): Promise<{ videoUrl: string; durationSeconds: number }>;
+}
+
 // ── Capability registry ─────────────────────────────────────────────────
 
-export type AiCapability = "story" | "image" | "video" | "voice";
+export type AiCapability = "story" | "image" | "video" | "voice" | "lipsync";
 
 export interface ProviderDescriptor {
   id: string;

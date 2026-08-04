@@ -7,6 +7,7 @@ import { processBackgroundImageJob } from "./background-image.processor";
 import { processSceneImageJob } from "./scene-image.processor";
 import { processSceneVideoJob } from "./scene-video.processor";
 import { processVoiceJob } from "./voice.processor";
+import { processLipSyncJob } from "./lipsync.processor";
 import { processRenderJob } from "./render.processor";
 import { processThumbnailJob } from "./thumbnail.processor";
 
@@ -18,6 +19,7 @@ export const processorRegistry: Partial<Record<JobType, (job: BullJob<BullJobDat
   scene_image: processSceneImageJob,
   scene_video: processSceneVideoJob,
   voice: processVoiceJob,
+  lipsync: processLipSyncJob,
   render: processRenderJob,
   thumbnail: processThumbnailJob,
 };

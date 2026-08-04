@@ -79,6 +79,7 @@ export default async function SettingsPage() {
               image: settings.providerOverrides?.image ?? undefined,
               video: settings.providerOverrides?.video ?? undefined,
               voice: settings.providerOverrides?.voice ?? undefined,
+              lipsync: settings.providerOverrides?.lipsync ?? undefined,
             }}
           />
         </CardContent>

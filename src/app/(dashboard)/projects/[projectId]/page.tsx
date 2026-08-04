@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { HelpButton } from "@/components/shared/help-button";
 import { GenerateStoryButton } from "./generate-story-button";
+import { PipelineModeToggle } from "./pipeline-mode-toggle";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const userId = await requireUserId();
@@ -30,6 +31,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {project.targetPlatform} · {project.durationSeconds}s · {project.language}
         </p>
       </div>
+
+      <PipelineModeToggle projectId={projectId} pipelineMode={project.pipelineMode ?? "semi"} />
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-sm text-muted-foreground">

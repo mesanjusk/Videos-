@@ -6,6 +6,7 @@ import { Scene } from "@/modules/scenes/models/Scene";
 import { Asset } from "@/modules/assets/models/Asset";
 import { composeVideo } from "@/core/ffmpeg/compose";
 import { uploadVideoAsset } from "@/core/storage/cloudinary";
+import { onRenderCompleted } from "@/core/queue/orchestrator";
 
 /** PDF Step 9 — Editing. Joins every scene with a generated video clip into the final export. */
 export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -17,9 +18,12 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       .sort({ index: 1 })
       .populate("videoAssetId")
       .populate("voiceAssetId")
+      .populate("lipSyncAssetId")
       .lean();
 
-    const renderable = scenes.filter((s) => s.videoAssetId && typeof s.videoAssetId === "object");
+    const renderable = scenes.filter(
+      (s) => (s.lipSyncAssetId && typeof s.lipSyncAssetId === "object") || (s.videoAssetId && typeof s.videoAssetId === "object"),
+    );
     if (renderable.length === 0) {
       throw new Error("No scenes have a generated video yet — generate at least one scene's video first.");
     }
@@ -32,12 +36,23 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
     await project.save();
 
     const compose = await composeVideo({
-      scenes: renderable.map((s) => ({
-        index: s.index,
-        videoUrl: (s.videoAssetId as unknown as { url: string }).url,
-        voiceUrl: s.voiceAssetId && typeof s.voiceAssetId === "object" ? (s.voiceAssetId as unknown as { url: string }).url : undefined,
-        dialogue: s.dialogue,
-      })),
+      scenes: renderable.map((s) => {
+        // Prefer the lip-synced clip when one exists — its own audio track already has the
+        // narration baked in, so the separate voice track (if any) is intentionally left unused.
+        const lipSynced = !!(s.lipSyncAssetId && typeof s.lipSyncAssetId === "object");
+        return {
+          index: s.index,
+          videoUrl: lipSynced
+            ? (s.lipSyncAssetId as unknown as { url: string }).url
+            : (s.videoAssetId as unknown as { url: string }).url,
+          voiceUrl:
+            !lipSynced && s.voiceAssetId && typeof s.voiceAssetId === "object"
+              ? (s.voiceAssetId as unknown as { url: string }).url
+              : undefined,
+          useEmbeddedAudio: lipSynced,
+          dialogue: s.dialogue,
+        };
+      }),
       musicUrl: musicAsset?.url,
       watermarkUrl: project.watermarkImageUrl ?? undefined,
     });
@@ -63,6 +78,8 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       project.status = "done";
       project.completionPercent = 100;
       await project.save();
+
+      await onRenderCompleted(jobDoc.userId, jobDoc.projectId.toString());
 
       return { assetId: asset._id.toString(), durationSeconds: compose.durationSeconds };
     } finally {
