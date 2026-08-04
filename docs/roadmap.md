@@ -10,9 +10,16 @@ large diff.
       with the PDF's default templates. `core/db` Mongoose models: Project, Character, Background,
       Scene, Job, Asset, PromptTemplate, Settings. `modules/accounts` — the Google Account Manager,
       with AES-256-GCM credential encryption and a quota-aware round-robin selector.
-- [ ] **Stage 2 — Auth + dashboard shell + wizard.** NextAuth Google OAuth (app login). Sidebar/topbar
-      dashboard layout, dark/light theme. Stats widgets (projects, recent videos, current jobs,
-      storage, Google accounts, queue, recent activity). 4-step project creation wizard.
+- [x] **Stage 2 — Auth + dashboard shell + wizard.** NextAuth v5 Google OAuth (JWT session strategy,
+      split edge-safe `auth.config.ts` from the Node-only `auth.ts` so `middleware.ts` never pulls in
+      the MongoDB driver). Sidebar/topbar dashboard layout, dark/light theme (next-themes). Stats
+      widgets wired to real DB queries (projects, recent videos, current jobs, storage, Google
+      accounts, queue, recent activity) with empty states, not placeholder numbers. 4-step project
+      creation wizard (Basics → Style → Story → Generate) with React Hook Form + Zod + Framer Motion
+      step transitions. Google Account Manager UI (add/enable/disable/set-default/remove, paired with
+      the ARCHITECTURE.md §3 two-step "OAuth-confirm-identity + paste AI Studio API key" flow).
+      shadcn-style UI primitives hand-written against Radix (button, card, dialog, dropdown-menu,
+      select, tabs, tooltip, etc.).
 - [ ] **Stage 3 — Story/Character/Background generation.** BullMQ queues + the Vercel cron-tick worker
       runtime. Story/character/background API routes wired to the providers through the queue.
       Character Library and Background Library UI (create once, reuse forever; version history).

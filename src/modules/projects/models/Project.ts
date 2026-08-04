@@ -33,7 +33,10 @@ const projectSchema = new Schema(
     durationSeconds: { type: Number, default: 60 },
     targetPlatform: { type: String, default: "youtube" }, // youtube | instagram | tiktok | ...
     style: { type: String, enum: VIDEO_STYLES, default: "Pixar" },
-    premise: { type: String },
+    customStyleDescription: { type: String }, // used when style === "Custom"
+    storyInputMode: { type: String, enum: ["idea", "script"], default: "idea" },
+    premise: { type: String }, // storyInputMode === "idea": a short idea for Gemini to expand
+    pastedScript: { type: String }, // storyInputMode === "script": a full script to structure into storyJson
     storyJson: {
       title: { type: String },
       characters: [{ name: String, role: String }],
