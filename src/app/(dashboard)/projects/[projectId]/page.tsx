@@ -1,22 +1,21 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Camera, Smile, Sparkles, Users, Image as ImageIcon } from "lucide-react";
 import { requireUserId } from "@/core/auth/session";
 import { getProject } from "@/modules/projects/service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { GenerateStoryButton } from "./generate-story-button";
 
-/**
- * Placeholder detail page — story generation (and the rest of the pipeline UI: characters,
- * backgrounds, scenes, voice, render, export) is wired up in Stages 3-5. This exists so the
- * wizard and dashboard "next action" links resolve to something real in Stage 2.
- */
 export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const userId = await requireUserId();
   const { projectId } = await params;
   const project = await getProject(userId, projectId);
   if (!project) notFound();
+
+  const hasStory = (project.storyJson?.scenes?.length ?? 0) > 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -38,29 +37,80 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Progress value={project.completionPercent ?? 0} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            {project.storyInputMode === "script" ? "Your script" : "Your idea"}
-          </CardTitle>
-          <CardDescription>This is what the story generator will expand into scenes.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="whitespace-pre-wrap text-sm">{project.premise || project.pastedScript}</p>
-        </CardContent>
-      </Card>
+      {!hasStory && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                {project.storyInputMode === "script" ? "Your script" : "Your idea"}
+              </CardTitle>
+              <CardDescription>This is what the story generator will expand into scenes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm">{project.premise || project.pastedScript}</p>
+            </CardContent>
+          </Card>
 
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
-          <p className="font-medium">Story, character, and scene generation is coming next</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            This project is saved as a draft. The generation pipeline (story → characters → backgrounds → scenes →
-            video → voice → edit → thumbnail) connects here in the next build stage.
-          </p>
-          <Button disabled>Generate story (coming soon)</Button>
-        </CardContent>
-      </Card>
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+              <p className="font-medium">Ready to write your story</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                We&rsquo;ll turn your idea into an 8-scene script with dialogue, camera angles, and emotion for each
+                scene — usually ready in under a minute.
+              </p>
+              <GenerateStoryButton projectId={projectId} />
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {hasStory && (
+        <>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="outline">
+              <Link href={`/projects/${projectId}/characters`}>
+                <Users className="h-4 w-4" />
+                Characters
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/projects/${projectId}/backgrounds`}>
+                <ImageIcon className="h-4 w-4" />
+                Backgrounds
+              </Link>
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{project.storyJson?.title}</CardTitle>
+              <CardDescription>{project.storyJson?.scenes?.length ?? 0} scenes</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {project.storyJson?.scenes?.map((scene) => (
+                <div key={scene.index} className="rounded-lg border border-border p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-medium">Scene {scene.index}</p>
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Camera className="h-3 w-3" />
+                        {scene.camera}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Smile className="h-3 w-3" />
+                        {scene.emotion}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-sm">{scene.visual}</p>
+                  {scene.dialogue && <p className="mt-1 text-sm italic text-muted-foreground">&ldquo;{scene.dialogue}&rdquo;</p>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

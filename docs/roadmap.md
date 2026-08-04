@@ -20,9 +20,15 @@ large diff.
       the ARCHITECTURE.md §3 two-step "OAuth-confirm-identity + paste AI Studio API key" flow).
       shadcn-style UI primitives hand-written against Radix (button, card, dialog, dropdown-menu,
       select, tabs, tooltip, etc.).
-- [ ] **Stage 3 — Story/Character/Background generation.** BullMQ queues + the Vercel cron-tick worker
-      runtime. Story/character/background API routes wired to the providers through the queue.
-      Character Library and Background Library UI (create once, reuse forever; version history).
+- [x] **Stage 3 — Story/Character/Background generation.** BullMQ queues (Upstash Redis) + the
+      Vercel-serverless "poll and drain" worker runtime (`/api/queue/tick`, bounded time budget, hit
+      by both Vercel Cron and a fire-and-forget self-call after enqueue for low latency — with an
+      honest note that Vercel Hobby's cron frequency limit makes the self-call the real workhorse on
+      free tier). Story/character/background generation wired end to end through the queue: enqueue →
+      processor resolves a pooled Google account → calls the Gemini provider → uploads to Cloudinary →
+      updates Project/Character/Background → Job status the UI polls. Quota errors mark the account
+      `quota_exceeded` and let BullMQ's own retry pick a different pooled account on the next attempt.
+      Character Library and Background Library UI with live generation status per card.
 - [ ] **Stage 4 — Scene Manager + scene image/video.** Scene cards (image, dialogue, camera, voice,
       emotion, status; generate/regenerate/duplicate/delete). Scene image generation. The Google Flow
       manual hand-off UI: assembled prompt + character reference shown to the operator, signed

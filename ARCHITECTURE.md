@@ -221,6 +221,12 @@ BullMQ's `Worker` is a persistent process — Vercel functions are not. The adap
   the owning `Scene`/`Project`/`Job` documents.
 - If self-hosting/always-on hosting is available later, `worker.ts` at the repo root runs the same
   processors as a true long-lived Worker — the processor functions are host-agnostic by design.
+- **Free-tier honesty:** Vercel Hobby restricts Cron Jobs to a low daily frequency, not per-minute —
+  so on Hobby, the cron backstop above only fires occasionally, and the fire-and-forget self-call
+  after enqueue is doing all the real work. That self-call is a plain HTTP request, not a Vercel
+  platform feature, so it works identically on every plan. For a real sub-minute backstop on Hobby
+  (covering jobs whose self-call failed), point a free external pinger — e.g. cron-job.org — at
+  `/api/queue/tick` instead of depending on `vercel.json`'s schedule.
 
 ## 8. Prompt engine
 
