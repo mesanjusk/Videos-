@@ -29,10 +29,15 @@ large diff.
       updates Project/Character/Background → Job status the UI polls. Quota errors mark the account
       `quota_exceeded` and let BullMQ's own retry pick a different pooled account on the next attempt.
       Character Library and Background Library UI with live generation status per card.
-- [ ] **Stage 4 — Scene Manager + scene image/video.** Scene cards (image, dialogue, camera, voice,
-      emotion, status; generate/regenerate/duplicate/delete). Scene image generation. The Google Flow
-      manual hand-off UI: assembled prompt + character reference shown to the operator, signed
-      Cloudinary upload widget to complete the task.
+- [x] **Stage 4 — Scene Manager + scene image/video.** Story generation now auto-creates one `Scene`
+      doc per story scene (Scene Planning, PDF step between Backgrounds and Images) so there's nothing
+      to manually transcribe. Scene Manager cards: assign characters/background, generate/regenerate
+      scene image, duplicate, delete. Scene video runs through the Google Flow manual hand-off end to
+      end: generate assembles the Step-5 prompt + character references and parks the Job/Scene in
+      `manual_pending`/`video_pending_manual` (denormalized onto the Scene too, so the hand-off panel
+      survives a reload); the operator copies the prompt into Flow, then uploads the clip via a
+      direct signed-Cloudinary-upload widget that completes the job. `withJobLifecycle` generalized to
+      support this non-"completed" terminal state without touching the other processors.
 - [ ] **Stage 5 — Voice + render + thumbnail.** Gemini voice provider wired through the queue. FFmpeg
       compose processor: concat clips in scene order, mix voice + music, burn captions, apply
       zoom/transition presets, overlay logo/watermark, export 1080×1920 30fps H.264. Thumbnail

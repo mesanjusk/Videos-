@@ -4,6 +4,7 @@ import { Project } from "@/modules/projects/models/Project";
 import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getStoryProvider } from "@/core/ai/registry";
+import { createScenesFromStory } from "@/modules/scenes/service";
 
 /** PDF Step 1 — Write the Story. */
 export async function processStoryJob(bullJob: BullJob<BullJobData>) {
@@ -38,6 +39,11 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     project.status = "story";
     project.completionPercent = Math.max(project.completionPercent ?? 0, 20);
     await project.save();
+
+    // Scene Planning (PDF workflow, between Backgrounds and Images) happens automatically here so a
+    // beginner never has to manually transcribe the story into scenes — the Scene Manager (Stage 4)
+    // just assigns characters/backgrounds to what's already there.
+    await createScenesFromStory(jobDoc.userId, jobDoc.projectId.toString(), story.scenes);
 
     return { title: story.title, sceneCount: story.scenes.length };
   });

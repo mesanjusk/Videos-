@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Camera, Smile, Sparkles, Users, Image as ImageIcon } from "lucide-react";
+import { Camera, Clapperboard, Smile, Sparkles, Users, Image as ImageIcon } from "lucide-react";
 import { requireUserId } from "@/core/auth/session";
 import { getProject } from "@/modules/projects/service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -78,6 +78,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <Link href={`/projects/${projectId}/backgrounds`}>
                 <ImageIcon className="h-4 w-4" />
                 Backgrounds
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href={`/projects/${projectId}/scenes`}>
+                <Clapperboard className="h-4 w-4" />
+                Scenes
               </Link>
             </Button>
           </div>

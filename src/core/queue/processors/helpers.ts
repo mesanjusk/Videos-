@@ -7,6 +7,15 @@ import type { HydratedDocument } from "mongoose";
 
 export type BullJobData = { jobId: string };
 
+export interface ProcessorResult extends Record<string, unknown> {
+  /**
+   * Defaults to "completed". A processor sets "manual_pending" when the work genuinely can't finish
+   * automatically — today only the Google Flow video hand-off (ARCHITECTURE.md §2): the job stays
+   * open until a separate endpoint (the manual-upload completion) marks it completed.
+   */
+  status?: "completed" | "manual_pending";
+}
+
 /**
  * Shared lifecycle around every processor: loads the Mongo `Job` doc, flips it to `running`, runs
  * the work, and records the outcome. On a `ProviderQuotaExceededError` it marks the pooled Google
@@ -18,8 +27,8 @@ export type BullJobData = { jobId: string };
  */
 export async function withJobLifecycle(
   bullJob: BullJob<BullJobData>,
-  run: (jobDoc: HydratedDocument<JobDoc>) => Promise<Record<string, unknown>>,
-): Promise<Record<string, unknown>> {
+  run: (jobDoc: HydratedDocument<JobDoc>) => Promise<ProcessorResult>,
+): Promise<ProcessorResult> {
   await connectToDatabase();
   const jobDoc = await Job.findById(bullJob.data.jobId);
   if (!jobDoc) throw new Error(`Job ${bullJob.data.jobId} not found`);
@@ -30,9 +39,10 @@ export async function withJobLifecycle(
 
   try {
     const result = await run(jobDoc);
-    jobDoc.status = "completed";
+    const finalStatus = result.status ?? "completed";
+    jobDoc.status = finalStatus;
     jobDoc.result = result;
-    jobDoc.progress = 100;
+    jobDoc.progress = finalStatus === "completed" ? 100 : jobDoc.progress;
     await jobDoc.save();
     return result;
   } catch (err) {

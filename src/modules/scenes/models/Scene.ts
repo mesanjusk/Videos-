@@ -28,6 +28,10 @@ const sceneSchema = new Schema(
     videoAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     voiceAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     videoTaskId: { type: String }, // manual hand-off task id (Google Flow), see core/ai VideoProvider
+    // Denormalized copy of the manual hand-off prompt so the Scene Manager can render it after a
+    // page reload without re-fetching the originating Job (ARCHITECTURE.md §2).
+    pendingVideoPrompt: { type: String },
+    pendingVideoInstructions: { type: String },
     status: { type: String, enum: SCENE_STATUSES, default: "pending", index: true },
     failureReason: { type: String },
   },
