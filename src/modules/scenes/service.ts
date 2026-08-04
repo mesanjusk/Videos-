@@ -2,6 +2,7 @@ import { connectToDatabase } from "@/core/db/mongoose";
 import { Scene } from "./models/Scene";
 import type { StoryScene } from "@/core/ai/types";
 import type { UpdateSceneInput } from "./schema";
+import { staleFlagsForUpdate } from "./dependencies";
 
 /** Called once story generation completes — one Scene doc per story scene (ARCHITECTURE.md §5). */
 export async function createScenesFromStory(userId: string, projectId: string, scenes: StoryScene[]) {
@@ -41,7 +42,18 @@ export async function getScene(userId: string, sceneId: string) {
 
 export async function updateScene(userId: string, sceneId: string, input: UpdateSceneInput) {
   await connectToDatabase();
-  return Scene.findOneAndUpdate({ _id: sceneId, userId }, { $set: input }, { new: true });
+  const existing = await Scene.findOne({ _id: sceneId, userId }).select(
+    "imageAssetId videoAssetId voiceAssetId",
+  );
+  if (!existing) return null;
+
+  const staleFlags = staleFlagsForUpdate(input);
+  // Only flag an asset stale if it was already generated — nothing to invalidate otherwise.
+  if (!existing.imageAssetId) delete staleFlags.imageStale;
+  if (!existing.videoAssetId) delete staleFlags.videoStale;
+  if (!existing.voiceAssetId) delete staleFlags.voiceStale;
+
+  return Scene.findOneAndUpdate({ _id: sceneId, userId }, { $set: { ...input, ...staleFlags } }, { new: true });
 }
 
 export async function duplicateScene(userId: string, sceneId: string) {

@@ -23,20 +23,37 @@ export class NoAvailableGoogleAccountError extends Error {
 export async function selectGoogleAccount(userId: string): Promise<HydratedDocument<GoogleAccountDoc>> {
   await connectToDatabase();
 
-  const candidate = await GoogleAccount.findOne({
+  const filter = {
     userId,
     status: "active",
     $or: [{ "quota.dailyLimit": 0 }, { $expr: { $lt: ["$quota.used", "$quota.dailyLimit"] } }],
-  })
-    .sort({ isDefault: -1, lastUsedAt: 1 })
-    .exec();
+  };
 
-  if (!candidate) {
+  // Find-then-save let two concurrent queue ticks pick the same least-recently-used account and
+  // both dispatch against it, defeating the pool's purpose of spreading quota. findOneAndUpdate
+  // makes the "pick + claim" a single atomic Mongo operation instead.
+  const candidateId = await GoogleAccount.findOne(filter).sort({ isDefault: -1, lastUsedAt: 1 }).select("_id").lean();
+  if (!candidateId) {
     throw new NoAvailableGoogleAccountError(userId);
   }
 
-  candidate.lastUsedAt = new Date();
-  await candidate.save();
+  const candidate = await GoogleAccount.findOneAndUpdate(
+    { _id: candidateId._id, ...filter },
+    { $set: { lastUsedAt: new Date() } },
+    { new: true },
+  );
+
+  // The account may have been claimed, disabled, or exhausted by a concurrent call between the
+  // lookup and the claim above; fall through to a plain retry rather than fail the whole job.
+  if (!candidate) {
+    const fallback = await GoogleAccount.findOneAndUpdate(filter, { $set: { lastUsedAt: new Date() } }, {
+      new: true,
+      sort: { isDefault: -1, lastUsedAt: 1 },
+    });
+    if (!fallback) throw new NoAvailableGoogleAccountError(userId);
+    return fallback;
+  }
+
   return candidate;
 }
 

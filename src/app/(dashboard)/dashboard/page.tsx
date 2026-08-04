@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { FolderKanban, HardDrive, ListChecks, Plus, UserRound, Video, Activity } from "lucide-react";
+import { FolderKanban, HardDrive, ListChecks, Plus, UserRound, Video, Activity, Play } from "lucide-react";
 import { requireUserId } from "@/core/auth/session";
 import { countProjectsByStatus, listProjects, nextActionForStatus } from "@/modules/projects/service";
 import { countJobsByStatus, listRecentJobs } from "@/modules/jobs/service";
-import { getStorageUsageBytes } from "@/modules/assets/service";
+import { getStorageUsageBytes, listRecentFinalVideos } from "@/modules/assets/service";
 import { listGoogleAccounts } from "@/modules/accounts/service";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -22,13 +22,14 @@ function formatBytes(bytes: number): string {
 
 export default async function DashboardPage() {
   const userId = await requireUserId();
-  const [projects, projectsByStatus, jobsByStatus, recentJobs, storageBytes, accounts] = await Promise.all([
+  const [projects, projectsByStatus, jobsByStatus, recentJobs, storageBytes, accounts, recentVideos] = await Promise.all([
     listProjects(userId),
     countProjectsByStatus(userId),
     countJobsByStatus(userId),
     listRecentJobs(userId, 6),
     getStorageUsageBytes(userId),
     listGoogleAccounts(userId),
+    listRecentFinalVideos(userId, 6),
   ]);
 
   const activeJobs = jobsByStatus.queued + jobsByStatus.running + jobsByStatus.manual_pending;
@@ -59,6 +60,30 @@ export default async function DashboardPage() {
         <StatCard icon={UserRound} label="Google accounts" value={accounts.length} hint={`${activeAccounts} active`} />
         <StatCard icon={Activity} label="Queue" value={jobsByStatus.queued} hint={`${jobsByStatus.running} running now`} />
       </div>
+
+      {recentVideos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent videos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {recentVideos.map((video) => (
+                <Link
+                  key={video._id.toString()}
+                  href={`/projects/${video.projectId.toString()}/edit`}
+                  className="group relative aspect-[9/16] overflow-hidden rounded-lg bg-muted"
+                >
+                  <video src={video.url} className="h-full w-full object-cover" muted preload="metadata" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
+                    <Play className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

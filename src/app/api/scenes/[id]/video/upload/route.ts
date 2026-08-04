@@ -44,6 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
 
     scene.set("videoAssetId", asset._id);
+    scene.set("videoStale", false);
     scene.status = "video_ready";
     await scene.save();
 

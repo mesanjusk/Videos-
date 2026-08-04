@@ -78,6 +78,7 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
     });
 
     scene.set("imageAssetId", asset._id);
+    scene.set("imageStale", false);
     scene.status = "image_ready";
     await scene.save();
 

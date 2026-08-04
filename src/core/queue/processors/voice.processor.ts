@@ -57,6 +57,7 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
     });
 
     scene.set("voiceAssetId", asset._id);
+    scene.set("voiceStale", false);
     scene.status = scene.videoAssetId ? "complete" : "voice_ready";
     await scene.save();
 

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Check, Copy, Loader2, Mic, MoreVertical, Smile, Sparkles, UploadCloud, Video } from "lucide-react";
+import { AlertTriangle, Camera, Check, Copy, Loader2, Mic, MoreVertical, Smile, Sparkles, UploadCloud, Video } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -28,6 +29,9 @@ export interface SceneListItem {
   videoTaskId: string | null;
   pendingVideoPrompt: string | null;
   pendingVideoInstructions: string | null;
+  imageStale: boolean;
+  videoStale: boolean;
+  voiceStale: boolean;
 }
 
 interface CharacterOption {
@@ -39,6 +43,15 @@ interface CharacterOption {
 interface BackgroundOption {
   id: string;
   name: string;
+}
+
+function StaleBadge() {
+  return (
+    <Badge variant="warning">
+      <AlertTriangle className="h-3 w-3" />
+      Outdated — edit changed since last generation
+    </Badge>
+  );
 }
 
 export function ScenesManager({
@@ -228,7 +241,10 @@ function SceneCard({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Scene image</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Scene image</p>
+              {scene.imageStale && <StaleBadge />}
+            </div>
             <div className="aspect-[4/5] w-full overflow-hidden rounded-lg bg-muted">
               {isGeneratingImage ? (
                 <Skeleton className="h-full w-full rounded-none" />
@@ -247,7 +263,10 @@ function SceneCard({
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Scene video</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Scene video</p>
+              {scene.videoStale && <StaleBadge />}
+            </div>
             {scene.videoUrl ? (
               <video src={scene.videoUrl} controls className="aspect-[4/5] w-full rounded-lg bg-black object-cover" />
             ) : (
@@ -266,7 +285,10 @@ function SceneCard({
 
         {scene.dialogue.trim() && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Voice</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Voice</p>
+              {scene.voiceStale && <StaleBadge />}
+            </div>
             {scene.voiceUrl && (
               <audio src={scene.voiceUrl} controls className="w-full">
                 <track kind="captions" />

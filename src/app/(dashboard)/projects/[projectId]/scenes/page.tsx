@@ -35,6 +35,9 @@ export default async function ScenesPage({ params }: { params: Promise<{ project
     videoTaskId: s.videoTaskId ?? null,
     pendingVideoPrompt: s.pendingVideoPrompt ?? null,
     pendingVideoInstructions: s.pendingVideoInstructions ?? null,
+    imageStale: s.imageStale ?? false,
+    videoStale: s.videoStale ?? false,
+    voiceStale: s.voiceStale ?? false,
   }));
 
   const characterOptions = characters.map((c) => ({

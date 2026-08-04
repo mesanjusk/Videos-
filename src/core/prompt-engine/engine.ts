@@ -25,16 +25,3 @@ export function renderTemplate(definition: PromptTemplateDefinition, context: Pr
   });
   return `${body.trim()}\n\n${formula}`;
 }
-
-/** Given a set of changed field names, returns which template scopes must be regenerated (ARCHITECTURE.md §5). */
-export function dependentScopes(
-  templates: PromptTemplateDefinition[],
-  changedFields: string[],
-): PromptTemplateDefinition["scope"][] {
-  const changed = new Set(changedFields);
-  const scopes = new Set<PromptTemplateDefinition["scope"]>();
-  for (const t of templates) {
-    if (t.variables.some((v) => changed.has(v))) scopes.add(t.scope);
-  }
-  return [...scopes];
-}

@@ -43,6 +43,28 @@ const STATUS_BADGE: Record<AccountListItem["status"], { label: string; variant: 
   error: { label: "Error", variant: "destructive" },
 };
 
+function formatLastUsed(lastUsedAt: string | null): string {
+  if (!lastUsedAt) return "Never used";
+  const diffMs = Date.now() - new Date(lastUsedAt).getTime();
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function QuotaLine({ account }: { account: AccountListItem }) {
+  const unbounded = account.quotaLimit <= 0;
+  return (
+    <p className="truncate text-xs text-muted-foreground">
+      {unbounded ? `${account.quotaUsed} calls today` : `${account.quotaUsed} / ${account.quotaLimit} calls today`}
+      {" · "}
+      {formatLastUsed(account.lastUsedAt)}
+    </p>
+  );
+}
+
 export function AccountsManager({ initialAccounts }: { initialAccounts: AccountListItem[] }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -116,6 +138,7 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{account.email}</p>
+                    <QuotaLine account={account} />
                   </div>
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   <DropdownMenu>

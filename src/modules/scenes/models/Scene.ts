@@ -34,6 +34,12 @@ const sceneSchema = new Schema(
     pendingVideoInstructions: { type: String },
     status: { type: String, enum: SCENE_STATUSES, default: "pending", index: true },
     failureReason: { type: String },
+    // Set when an editable field this asset depends on changes after the asset was generated
+    // (ARCHITECTURE.md §5's dependency-based invalidation) — see modules/scenes/dependencies.ts.
+    // Cleared by the corresponding processor/upload route once that asset is regenerated.
+    imageStale: { type: Boolean, default: false },
+    videoStale: { type: Boolean, default: false },
+    voiceStale: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
