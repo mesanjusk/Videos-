@@ -8,6 +8,7 @@ import type { UpdateSceneInput } from "./schema";
  * variable lists.
  */
 const FIELD_STALE_FLAGS: Record<keyof UpdateSceneInput, ("imageStale" | "videoStale" | "voiceStale")[]> = {
+  visual: ["imageStale", "videoStale"],
   camera: ["imageStale", "videoStale"],
   emotion: ["imageStale", "videoStale"],
   characterIds: ["imageStale", "videoStale"],

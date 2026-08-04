@@ -81,3 +81,29 @@ export async function deleteScene(userId: string, sceneId: string) {
   await connectToDatabase();
   await Scene.deleteOne({ _id: sceneId, userId });
 }
+
+/**
+ * Applies a new scene order (drag-and-drop reorder in the Scene Manager). `sceneIds` must be every
+ * scene in the project, in the desired order. Writing final indexes in one pass would collide with
+ * the `{projectId, index}` unique index whenever any two scenes swap places, so this stages through
+ * negative placeholder indexes (guaranteed not to collide with any existing or final positive index)
+ * before writing the real 0-based positions.
+ */
+export async function reorderScenes(userId: string, projectId: string, sceneIds: string[]): Promise<boolean> {
+  await connectToDatabase();
+  const owned = await Scene.find({ userId, projectId }).select("_id").lean();
+  const ownedIds = new Set(owned.map((s) => s._id.toString()));
+  if (sceneIds.length !== owned.length || sceneIds.some((id) => !ownedIds.has(id))) return false;
+
+  await Scene.bulkWrite(
+    sceneIds.map((id, position) => ({
+      updateOne: { filter: { _id: id, userId }, update: { $set: { index: -(position + 1) } } },
+    })),
+  );
+  await Scene.bulkWrite(
+    sceneIds.map((id, position) => ({
+      updateOne: { filter: { _id: id, userId }, update: { $set: { index: position } } },
+    })),
+  );
+  return true;
+}

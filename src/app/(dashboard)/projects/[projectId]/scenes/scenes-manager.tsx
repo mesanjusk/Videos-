@@ -3,13 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { AlertTriangle, Camera, Check, Copy, Loader2, Mic, MoreVertical, Smile, Sparkles, UploadCloud, Video } from "lucide-react";
+import { Reorder, useDragControls } from "framer-motion";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  Copy,
+  GripVertical,
+  Loader2,
+  Mic,
+  MoreVertical,
+  Pencil,
+  Smile,
+  Sparkles,
+  UploadCloud,
+  Video,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import type { SceneStatus } from "@/modules/scenes/models/Scene";
 import { useJobPolling } from "@/hooks/use-job-polling";
 
@@ -65,26 +83,58 @@ export function ScenesManager({
   characterOptions: CharacterOption[];
   backgroundOptions: BackgroundOption[];
 }) {
-  void projectId;
+  const [scenes, setScenes] = useState(initialScenes);
+  const [reorderError, setReorderError] = useState<string | null>(null);
+
+  async function handleReorder(next: SceneListItem[]) {
+    const previous = scenes;
+    setScenes(next);
+    setReorderError(null);
+    const res = await fetch(`/api/projects/${projectId}/scenes/reorder`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sceneIds: next.map((s) => s.id) }),
+    });
+    if (!res.ok) {
+      setScenes(previous);
+      setReorderError("Couldn't save the new scene order. Please try again.");
+    }
+  }
+
   return (
     <div className="space-y-4">
-      {initialScenes.map((scene) => (
-        <SceneCard key={scene.id} scene={scene} characterOptions={characterOptions} backgroundOptions={backgroundOptions} />
-      ))}
+      {reorderError && <p className="text-sm text-destructive">{reorderError}</p>}
+      <Reorder.Group axis="y" values={scenes} onReorder={handleReorder} className="space-y-4">
+        {scenes.map((scene, position) => (
+          <SceneCard
+            key={scene.id}
+            scene={scene}
+            position={position + 1}
+            characterOptions={characterOptions}
+            backgroundOptions={backgroundOptions}
+          />
+        ))}
+      </Reorder.Group>
     </div>
   );
 }
 
 function SceneCard({
   scene,
+  position,
   characterOptions,
   backgroundOptions,
 }: {
   scene: SceneListItem;
+  position: number;
   characterOptions: CharacterOption[];
   backgroundOptions: BackgroundOption[];
 }) {
   const router = useRouter();
+  const dragControls = useDragControls();
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [draft, setDraft] = useState({ visual: scene.visual, dialogue: scene.dialogue, camera: scene.camera, emotion: scene.emotion });
   const [imageJobId, setImageJobId] = useState<string | null>(null);
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const [voiceJobId, setVoiceJobId] = useState<string | null>(null);
@@ -155,6 +205,25 @@ function SceneCard({
     router.refresh();
   }
 
+  async function saveEdit() {
+    setSavingEdit(true);
+    const res = await fetch(`/api/scenes/${scene.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+    });
+    setSavingEdit(false);
+    if (res.ok) {
+      setEditing(false);
+      router.refresh();
+    }
+  }
+
+  function cancelEdit() {
+    setDraft({ visual: scene.visual, dialogue: scene.dialogue, camera: scene.camera, emotion: scene.emotion });
+    setEditing(false);
+  }
+
   async function remove() {
     await fetch(`/api/scenes/${scene.id}`, { method: "DELETE" });
     router.refresh();
@@ -164,39 +233,105 @@ function SceneCard({
   const selectedCharacters = characterOptions.filter((c) => scene.characterIds.includes(c.id));
 
   return (
-    <Card>
-      <CardContent className="space-y-4 p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-sm font-medium">Scene {scene.index}</p>
-            <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Camera className="h-3 w-3" />
-                {scene.camera}
-              </span>
-              <span className="flex items-center gap-1">
-                <Smile className="h-3 w-3" />
-                {scene.emotion}
-              </span>
+    <Reorder.Item value={scene} dragListener={false} dragControls={dragControls} as="div">
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                onPointerDown={(e) => dragControls.start(e)}
+                className="mt-0.5 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+                aria-label="Drag to reorder scene"
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+              <div>
+                <p className="text-sm font-medium">Scene {position}</p>
+                {!editing && (
+                  <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Camera className="h-3 w-3" />
+                      {scene.camera}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Smile className="h-3 w-3" />
+                      {scene.emotion}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              {!editing && (
+                <Button variant="ghost" size="icon" aria-label="Edit scene details" onClick={() => setEditing(true)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Scene actions">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={duplicate}>Duplicate</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onSelect={remove}>
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Scene actions">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={duplicate}>Duplicate</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onSelect={remove}>
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
 
-        <p className="text-sm">{scene.visual}</p>
-        {scene.dialogue && <p className="text-sm italic text-muted-foreground">&ldquo;{scene.dialogue}&rdquo;</p>}
+          {editing ? (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">What happens in this scene</label>
+                <Textarea
+                  value={draft.visual}
+                  onChange={(e) => setDraft((d) => ({ ...d, visual: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Dialogue</label>
+                <Textarea
+                  value={draft.dialogue}
+                  onChange={(e) => setDraft((d) => ({ ...d, dialogue: e.target.value }))}
+                  rows={2}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Camera</label>
+                  <Input value={draft.camera} onChange={(e) => setDraft((d) => ({ ...d, camera: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Emotion</label>
+                  <Input value={draft.emotion} onChange={(e) => setDraft((d) => ({ ...d, emotion: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
+                  {savingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  Save changes
+                </Button>
+                <Button size="sm" variant="outline" onClick={cancelEdit} disabled={savingEdit}>
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Changing these marks any already-generated image, video, or voice for this scene as outdated.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm">{scene.visual}</p>
+              {scene.dialogue && <p className="text-sm italic text-muted-foreground">&ldquo;{scene.dialogue}&rdquo;</p>}
+            </>
+          )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -312,7 +447,8 @@ function SceneCard({
           />
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </Reorder.Item>
   );
 }
 
