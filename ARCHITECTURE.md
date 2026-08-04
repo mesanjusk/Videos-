@@ -209,9 +209,9 @@ BullMQ's `Worker` is a persistent process — Vercel functions are not. The adap
 - Producers (route handlers) `queue.add(...)` as normal; this is a fast Redis call, works fine in a
   serverless function.
 - Consumption happens in `/api/queue/tick`, invoked two ways:
-  1. **Vercel Cron** (`vercel.json`, every minute) — the steady heartbeat.
-  2. **Fire-and-forget self-call** immediately after a route enqueues a job — cuts p50 latency from
-     ~30s (cron cadence) to near-immediate, cron remains the reliability backstop.
+  1. **Vercel Cron** (`vercel.json`, once daily) — the backstop, not the heartbeat (see below for why).
+  2. **Fire-and-forget self-call** immediately after a route enqueues a job — this is what actually
+     drives near-real-time processing; see the honesty note.
 - Inside the tick handler: construct a `Worker` per queue with `autorun: false`, call `worker.run()`,
   and `worker.close()` after a fixed time budget (`QUEUE_TICK_BUDGET_MS`, default 45s, safely under
   Vercel's function timeout) or when no jobs remain, whichever is first. This is the standard
@@ -221,12 +221,16 @@ BullMQ's `Worker` is a persistent process — Vercel functions are not. The adap
   the owning `Scene`/`Project`/`Job` documents.
 - If self-hosting/always-on hosting is available later, `worker.ts` at the repo root runs the same
   processors as a true long-lived Worker — the processor functions are host-agnostic by design.
-- **Free-tier honesty:** Vercel Hobby restricts Cron Jobs to a low daily frequency, not per-minute —
-  so on Hobby, the cron backstop above only fires occasionally, and the fire-and-forget self-call
-  after enqueue is doing all the real work. That self-call is a plain HTTP request, not a Vercel
-  platform feature, so it works identically on every plan. For a real sub-minute backstop on Hobby
-  (covering jobs whose self-call failed), point a free external pinger — e.g. cron-job.org — at
-  `/api/queue/tick` instead of depending on `vercel.json`'s schedule.
+- **Free-tier honesty:** Vercel Hobby doesn't just throttle sub-daily Cron Jobs, it refuses to deploy
+  them at all — `vercel.json` originally declared `* * * * *` (every minute) and the Hobby deploy UI
+  hard-blocked it with `Hobby accounts are limited to daily cron jobs`, no partial/degraded fallback.
+  `vercel.json` now declares `0 0 * * *` (once daily) so the project actually deploys on Hobby; that
+  makes the cron backstop close to useless on this plan, and the fire-and-forget self-call after
+  enqueue is doing essentially all the real work. That self-call is a plain HTTP request, not a
+  Vercel platform feature, so it works identically on every plan. For a real sub-minute backstop on
+  Hobby (covering jobs whose self-call failed), point a free external pinger — e.g. cron-job.org — at
+  `/api/queue/tick` instead of depending on `vercel.json`'s schedule. Upgrading to Pro removes the
+  restriction and lets `vercel.json` go back to a per-minute schedule.
 
 ## 8. Prompt engine
 

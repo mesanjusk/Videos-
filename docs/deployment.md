@@ -53,13 +53,16 @@ vercel env add ...   # one per variable, or paste them into the dashboard
 vercel deploy --prod
 ```
 
-`vercel.json` already declares the `/api/queue/tick` cron. Read the honesty note in
-ARCHITECTURE.md §7 before relying on it: **Vercel Hobby caps Cron Jobs at a low daily frequency**, not
-per-minute. The fire-and-forget self-call after every enqueue (`modules/jobs/service.ts`) is what
-actually drives near-real-time processing on Hobby — the cron is a backstop for anything that
-self-call missed. If you're on Hobby and want a real sub-minute backstop, point a free external
+`vercel.json` declares the `/api/queue/tick` cron as `0 0 * * *` (once daily) — deliberately, because
+**Vercel Hobby refuses to deploy a project at all if `vercel.json` schedules a cron more than once a
+day**; the original per-minute schedule hard-blocked the first deploy with `Hobby accounts are
+limited to daily cron jobs`, no degraded fallback. Read the honesty note in ARCHITECTURE.md §7 before
+relying on this: at once a day, the cron is close to useless as a backstop, and the fire-and-forget
+self-call after every enqueue (`modules/jobs/service.ts`) is what actually drives near-real-time
+processing on Hobby. If you're on Hobby and want a real sub-minute backstop, point a free external
 pinger (e.g. [cron-job.org](https://cron-job.org)) at `POST /api/queue/tick` with the `CRON_SECRET`
-bearer header instead of relying on `vercel.json`.
+bearer header instead of relying on `vercel.json`. On Pro, the restriction lifts and `vercel.json` can
+go back to a per-minute schedule.
 
 ## 5. Long-running work: serverless tick vs. the standalone worker
 
