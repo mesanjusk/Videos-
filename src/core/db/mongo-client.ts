@@ -16,8 +16,16 @@ function createClientPromise(): Promise<MongoClient> {
       new Error("MONGODB_URI is not set — configure your MongoDB Atlas connection string."),
     );
   }
-  const client = new MongoClient(uri);
-  return client.connect();
+  // `new MongoClient(uri)` throws synchronously (not a rejected promise) for a structurally
+  // invalid URI (e.g. MongoParseError: Invalid scheme) — this function is called synchronously at
+  // module scope below, so an uncaught throw here crashes module evaluation itself, not just a
+  // request. Wrapping guarantees a rejected promise every time, matching the missing-URI case above.
+  try {
+    const client = new MongoClient(uri);
+    return client.connect();
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
 const clientPromise = global._mongoClientPromise ?? createClientPromise();
