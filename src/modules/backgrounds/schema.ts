@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BACKGROUND_CATEGORIES } from "./models/Background";
+import { BACKGROUND_CATEGORIES } from "./constants";
 
 export const createBackgroundSchema = z.object({
   name: z.string().min(1).max(60),

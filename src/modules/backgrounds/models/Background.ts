@@ -1,16 +1,9 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
+import { BACKGROUND_CATEGORIES } from "../constants";
 
-export const BACKGROUND_CATEGORIES = [
-  "indoor",
-  "outdoor",
-  "forest",
-  "temple",
-  "city",
-  "village",
-  "beach",
-  "mountains",
-  "custom",
-] as const;
+// BACKGROUND_CATEGORIES lives in ../constants (no mongoose import) so client components can import
+// it without pulling this server-only model file into the browser bundle. Import from there, not
+// from here.
 
 const backgroundSchema = new Schema(
   {

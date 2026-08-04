@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VIDEO_STYLES } from "./models/Project";
+import { VIDEO_STYLES } from "./constants";
 
 /** Shared between the wizard's React Hook Form resolver and the POST /api/projects route handler. */
 export const createProjectSchema = z

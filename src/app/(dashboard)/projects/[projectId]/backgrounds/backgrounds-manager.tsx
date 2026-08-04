@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Image as ImageIcon, Loader2, MoreVertical, Plus, RefreshCcw } from "lucide-react";
 import { createBackgroundSchema, type CreateBackgroundInput } from "@/modules/backgrounds/schema";
-import { BACKGROUND_CATEGORIES } from "@/modules/backgrounds/models/Background";
+import { BACKGROUND_CATEGORIES } from "@/modules/backgrounds/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {

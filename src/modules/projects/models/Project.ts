@@ -1,17 +1,9 @@
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
+import { PROJECT_STATUSES, VIDEO_STYLES } from "../constants";
 
-export const PROJECT_STATUSES = [
-  "draft",
-  "story",
-  "characters",
-  "backgrounds",
-  "scenes",
-  "rendering",
-  "done",
-] as const;
-export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
-
-export const VIDEO_STYLES = ["Pixar", "Disney", "Anime", "Realistic", "3D", "Custom"] as const;
+// PROJECT_STATUSES/VIDEO_STYLES live in ../constants (no mongoose import) specifically so client
+// components can import them without pulling this server-only model file into the browser bundle
+// — see ../constants for why. Import from there, not from here.
 
 const storySceneSchema = new Schema(
   {

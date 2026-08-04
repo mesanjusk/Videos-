@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 import { createProjectSchema, type CreateProjectInput } from "@/modules/projects/schema";
-import { VIDEO_STYLES } from "@/modules/projects/models/Project";
+import { VIDEO_STYLES } from "@/modules/projects/constants";
 import { Stepper } from "@/components/shared/stepper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

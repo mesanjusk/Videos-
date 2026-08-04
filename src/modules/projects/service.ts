@@ -1,5 +1,6 @@
 import { connectToDatabase } from "@/core/db/mongoose";
-import { Project, type ProjectStatus } from "./models/Project";
+import { Project } from "./models/Project";
+import type { ProjectStatus } from "./constants";
 import type { CreateProjectInput } from "./schema";
 
 /** Rough guide for "always show the next recommended action" — refined once queue-driven stages (3+) exist. */
