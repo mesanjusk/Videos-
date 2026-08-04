@@ -117,3 +117,31 @@ Given the size of the full V2 vision, work proceeds in milestones, each committe
 Lip-sync and platform export are deliberately not in this session's scope — they require a
 product decision (manual hand-off vs. skip, which platforms/OAuth scopes to support) that's
 flagged here for a follow-up milestone rather than guessed at.
+
+## Status
+
+All three milestones above shipped this session (see commit history on this branch):
+
+1. Done — account-selector race fixed with an atomic `findOneAndUpdate`; dead prompt-dependency
+   code replaced with a real Scene-field → asset-staleness map (`imageStale`/`videoStale`/
+   `voiceStale`, shown in the Scene Manager); account quota and a dashboard video gallery now
+   render data that already existed but was never wired to the UI.
+2. Done — `/library` page plus `cloneCharacterIntoProject`/`cloneBackgroundIntoProject`: reuse a
+   character's face/outfit/voice/style/prompt or a background's generated image in another
+   project without regenerating anything, entry points from both the Library page and each
+   project's Characters/Backgrounds page.
+3. Done — drag-and-drop scene reordering (Framer Motion's `Reorder`, no new dependency) and
+   inline editing of visual/dialogue/camera/emotion per scene, wired to the staleness flags from
+   milestone 1.
+
+### Recommended next milestones (not started)
+
+- **Google Account Manager OAuth verification** — `AddAccountForm` still lets a user type an
+  arbitrary email with no proof they control that Google account. Needs the real two-step flow
+  ARCHITECTURE.md §3 describes.
+- **Lip-sync and export/upload steps** — both need a product decision first (manual hand-off vs.
+  an explicit "not available on this stack" state for lip-sync; which platforms/OAuth scopes for
+  export) before implementation.
+- **`withApiAuth` wrapper** — remove the copy-pasted auth try/catch across ~24+ route handlers.
+- **Sharp/fluent-ffmpeg cleanup** — both are declared dependencies with zero real usage; either
+  wire Sharp into thumbnail compositing as originally designed, or drop the dependency.
