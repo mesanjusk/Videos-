@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Check, Copy, Loader2, MoreVertical, Smile, Sparkles, UploadCloud, Video } from "lucide-react";
+import { Camera, Check, Copy, Loader2, Mic, MoreVertical, Smile, Sparkles, UploadCloud, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -24,6 +24,7 @@ export interface SceneListItem {
   backgroundId: string | null;
   imageUrl: string | null;
   videoUrl: string | null;
+  voiceUrl: string | null;
   videoTaskId: string | null;
   pendingVideoPrompt: string | null;
   pendingVideoInstructions: string | null;
@@ -73,8 +74,10 @@ function SceneCard({
   const router = useRouter();
   const [imageJobId, setImageJobId] = useState<string | null>(null);
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  const [voiceJobId, setVoiceJobId] = useState<string | null>(null);
   const imagePoll = useJobPolling(imageJobId);
   const videoPoll = useJobPolling(videoJobId);
+  const voicePoll = useJobPolling(voiceJobId);
 
   useEffect(() => {
     if (imagePoll.isDone) router.refresh();
@@ -82,8 +85,12 @@ function SceneCard({
   useEffect(() => {
     if (videoPoll.isDone) router.refresh();
   }, [videoPoll.isDone, router]);
+  useEffect(() => {
+    if (voicePoll.isDone) router.refresh();
+  }, [voicePoll.isDone, router]);
 
   const isGeneratingImage = (imageJobId && !imagePoll.isDone) || scene.status === "image_queued";
+  const isGeneratingVoice = voiceJobId && !voicePoll.isDone;
 
   async function generateImage() {
     const res = await fetch(`/api/scenes/${scene.id}/image`, { method: "POST" });
@@ -98,6 +105,14 @@ function SceneCard({
     if (res.ok) {
       const { job } = await res.json();
       setVideoJobId(job._id);
+    }
+  }
+
+  async function generateVoice() {
+    const res = await fetch(`/api/scenes/${scene.id}/voice`, { method: "POST" });
+    if (res.ok) {
+      const { job } = await res.json();
+      setVoiceJobId(job._id);
     }
   }
 
@@ -248,6 +263,22 @@ function SceneCard({
             )}
           </div>
         </div>
+
+        {scene.dialogue.trim() && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Voice</p>
+            {scene.voiceUrl && (
+              <audio src={scene.voiceUrl} controls className="w-full">
+                <track kind="captions" />
+              </audio>
+            )}
+            <Button size="sm" variant="outline" onClick={generateVoice} disabled={!!isGeneratingVoice}>
+              {isGeneratingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+              {scene.voiceUrl ? "Regenerate voice" : "Generate voice"}
+            </Button>
+            {voicePoll.job?.status === "failed" && <p className="text-xs text-destructive">{voicePoll.job.error}</p>}
+          </div>
+        )}
 
         {showVideoHandoff && (
           <VideoHandoffPanel

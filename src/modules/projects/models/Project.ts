@@ -44,8 +44,19 @@ const projectSchema = new Schema(
     },
     status: { type: String, enum: PROJECT_STATUSES, default: "draft", index: true },
     completionPercent: { type: Number, default: 0, min: 0, max: 100 },
+    // The PDF's Music step (Suno/Udio/Epidemic/Artlist) has no approved-stack replacement — none of
+    // those tools are on the allowed list, and no music-generation service is. Rather than silently
+    // reaching for a forbidden tool, background music is a user-supplied upload (Cloudinary-stored),
+    // optional, and skipped entirely in the render if not provided.
+    musicAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
+    watermarkImageUrl: { type: String },
     finalVideoAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     thumbnailAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
+    // Auto-derived from storyJson/style/characters alongside the thumbnail image — no extra AI call,
+    // just composed from data already generated (title, description, tags).
+    thumbnailTitle: { type: String },
+    thumbnailDescription: { type: String },
+    thumbnailTags: [{ type: String }],
   },
   { timestamps: true },
 );

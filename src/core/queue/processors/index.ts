@@ -6,16 +6,18 @@ import { processCharacterImageJob } from "./character-image.processor";
 import { processBackgroundImageJob } from "./background-image.processor";
 import { processSceneImageJob } from "./scene-image.processor";
 import { processSceneVideoJob } from "./scene-video.processor";
+import { processVoiceJob } from "./voice.processor";
+import { processRenderJob } from "./render.processor";
+import { processThumbnailJob } from "./thumbnail.processor";
 
-/**
- * Only job types with an entry here get a Worker spun up by the queue tick (core/queue/worker-runtime.ts).
- * Add voice/render/thumbnail entries as their stages land — nothing else in the queue system needs
- * to change.
- */
+/** Every job type is now registered — this is the complete set from ARCHITECTURE.md §7/§11. */
 export const processorRegistry: Partial<Record<JobType, (job: BullJob<BullJobData>) => Promise<unknown>>> = {
   story: processStoryJob,
   character_image: processCharacterImageJob,
   background_image: processBackgroundImageJob,
   scene_image: processSceneImageJob,
   scene_video: processSceneVideoJob,
+  voice: processVoiceJob,
+  render: processRenderJob,
+  thumbnail: processThumbnailJob,
 };

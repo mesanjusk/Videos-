@@ -74,6 +74,20 @@ export function nextActionForStatus(status: ProjectStatus): { label: string; hre
     case "rendering":
       return { label: "View render progress", href: (id) => `/projects/${id}/edit` };
     case "done":
-      return { label: "Download & export", href: (id) => `/projects/${id}/export` };
+      return { label: "Download & export", href: (id) => `/projects/${id}/edit` };
   }
+}
+
+export async function setProjectMusic(userId: string, projectId: string, assetId: string) {
+  await connectToDatabase();
+  return Project.findOneAndUpdate({ _id: projectId, userId }, { $set: { musicAssetId: assetId } }, { new: true });
+}
+
+export async function setWatermarkUrl(userId: string, projectId: string, watermarkImageUrl: string | null) {
+  await connectToDatabase();
+  return Project.findOneAndUpdate(
+    { _id: projectId, userId },
+    watermarkImageUrl ? { $set: { watermarkImageUrl } } : { $unset: { watermarkImageUrl: "" } },
+    { new: true },
+  );
 }

@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
-  serverExternalPackages: ["fluent-ffmpeg", "@ffmpeg-installer/ffmpeg", "sharp"],
+  serverExternalPackages: ["fluent-ffmpeg", "ffmpeg-static", "sharp"],
 };
 
 export default nextConfig;

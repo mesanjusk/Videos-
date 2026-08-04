@@ -30,6 +30,7 @@ export async function listScenes(userId: string, projectId: string) {
     .populate("backgroundId", "name")
     .populate("imageAssetId")
     .populate("videoAssetId")
+    .populate("voiceAssetId")
     .lean();
 }
 

@@ -20,7 +20,7 @@ provider-agnostically, for a multi-user SaaS.
 | Object storage | Cloudinary (free tier) | all binary assets — images, video, audio, thumbnails |
 | Auth | Auth.js (NextAuth v5) + Google OAuth | session = app login; **separate** from the Google Account Manager (§6) |
 | Queue | BullMQ + Upstash Redis (free tier, TLS) | see §7 for the Vercel-serverless adaptation |
-| Video compose | FFmpeg (`fluent-ffmpeg` + `@ffmpeg-installer/ffmpeg`) | runs only inside queue processors, never in a request handler |
+| Video compose | FFmpeg (`fluent-ffmpeg` + `ffmpeg-static`) | runs only inside queue processors, never in a request handler; `ffmpeg-static` ships a current (7.x) build — verified against the alternative `@ffmpeg-installer/ffmpeg` package, whose pinned 2018 static binary lacks the `xfade` filter transitions need |
 | Image ops | Sharp | thumbnail crops/resizes, turnaround-sheet compositing |
 | Hosting | Vercel (Hobby/free) | Cron for queue ticks; no long-lived processes |
 
@@ -254,12 +254,32 @@ src/core/prompt-engine/
 
 ## 9. Editing pipeline (FFmpeg, in a queue processor only)
 
-`core/ffmpeg/compose.ts`: download scene clips + voice track + music track from Cloudinary into
-`/tmp` (ephemeral, cleaned per invocation) → concat clips in scene order → mix voice + music →
-burn captions (from `Scene.dialogue`) → apply configured zoom/transition preset → overlay
-logo/watermark if configured → export `1080×1920, 30fps, H.264` → upload the result to Cloudinary as
-an `Asset(kind: "final_video")` → mark `Project.status = "done"`. Runs exclusively inside the
-`render` queue processor (never in a request handler) because it is CPU- and time-heavy.
+`core/ffmpeg/compose.ts`: download scene clips + voice tracks + an optional music track from
+Cloudinary into `/tmp` (ephemeral, cleaned per invocation) → per-clip scale/crop to portrait + a
+gentle Ken Burns zoom (`zoompan`) → `xfade` transitions chaining clips in scene order → per-scene
+narration built from each scene's voice track (or exact silence where a scene has none) chained with
+matching `acrossfade` crossfades so audio stays in sync with the video transitions → mix in the music
+bed if provided (`amix`) → burn captions from `Scene.dialogue` (via the `subtitles`/libass filter,
+timed off the same transition-aware offsets — not `drawtext`, see below) → overlay a logo/watermark
+image if configured → export `1080×1920, 30fps, H.264/AAC` → upload the result to Cloudinary as an
+`Asset(kind: "final_video")` → mark `Project.status = "done"`. Runs exclusively inside the `render`
+queue processor (never in a request handler) because it is CPU- and time-heavy.
+
+This exact filter graph was hand-verified against synthetic clips (mismatched resolutions/framerates,
+mixed voiced/silent scenes, with and without music/watermark) before being wired in — two
+implementation details worth flagging:
+
+- **`ffmpeg-static`, not `@ffmpeg-installer/ffmpeg`.** The latter's pinned static binary is from 2018
+  and has no `xfade` filter, which transitions depend on. Verified directly; swapped packages rather
+  than discovering it in production.
+- **Captions burn via the `subtitles` filter (libass), not `drawtext`.** The `ffmpeg-static` build
+  doesn't compile in `drawtext` at all, so a generated `.srt` + `subtitles=...:force_style=...` is
+  used instead — which is also the more correct approach for genuinely timed captions anyway.
+- **No music-generation provider.** The PDF's Music step (Suno/Udio/Epidemic Sound/Artlist) has no
+  approved-stack replacement — none of those tools are allowed, and the brief lists no
+  music-generation AI provider at all. Rather than reach for a forbidden tool or invent an
+  unapproved one, background music is a user-supplied upload (`Project.musicAssetId`), optional and
+  skipped in the render if absent.
 
 ## 10. Folder structure
 

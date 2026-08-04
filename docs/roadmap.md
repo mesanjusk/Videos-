@@ -38,10 +38,22 @@ large diff.
       survives a reload); the operator copies the prompt into Flow, then uploads the clip via a
       direct signed-Cloudinary-upload widget that completes the job. `withJobLifecycle` generalized to
       support this non-"completed" terminal state without touching the other processors.
-- [ ] **Stage 5 — Voice + render + thumbnail.** Gemini voice provider wired through the queue. FFmpeg
-      compose processor: concat clips in scene order, mix voice + music, burn captions, apply
-      zoom/transition presets, overlay logo/watermark, export 1080×1920 30fps H.264. Thumbnail
-      generator (image + auto title/description/tags).
+- [x] **Stage 5 — Voice + render + thumbnail.** Gemini voice provider wired through the queue
+      (per-scene dialogue, using the scene's primary character's voice profile when set). The FFmpeg
+      compose pipeline (`core/ffmpeg/compose.ts`) — hand-verified against synthetic clips before being
+      wired in (see the commit message and ARCHITECTURE.md §9): `xfade` transitions between scenes,
+      a `zoompan` Ken Burns effect per clip, per-scene narration crossfaded (`acrossfade`) in sync with
+      the video transitions (silence-filled where a scene has no voice), an optional music bed mixed
+      under it, captions burned via the `subtitles`/libass filter (this build has no `drawtext`), an
+      optional watermark overlay, exported 1080×1920/30fps/H.264. Swapped `@ffmpeg-installer/ffmpeg`
+      for `ffmpeg-static` after discovering the former's pinned binary predates `xfade` entirely.
+      Standalone `worker.ts` added as the non-serverless alternative — the honest answer to render
+      jobs risking a serverless function's time limit. No music-*generation* provider: the brief's
+      allowed list has no replacement for Suno/Udio/Epidemic/Artlist, so background music is a
+      user-supplied upload instead of reaching for a forbidden or invented tool. Thumbnail generator
+      produces the image plus a title/description/tags (composed from already-generated data, not an
+      extra AI call). New Edit & Export page ties render, thumbnail, music upload, and watermark
+      together.
 - [ ] **Stage 6 — Prompt Library, Settings, polish.** Editable prompt templates UI (variables,
       dependency-aware regeneration). Settings (theme, language, provider overrides, Cloudinary/Mongo
       status). Empty states, loading skeletons, Framer Motion transitions, responsive pass. API

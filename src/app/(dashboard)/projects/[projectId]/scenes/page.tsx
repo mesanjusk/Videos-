@@ -31,6 +31,7 @@ export default async function ScenesPage({ params }: { params: Promise<{ project
     backgroundId: s.backgroundId ? (typeof s.backgroundId === "object" ? (s.backgroundId as unknown as { _id: string })._id.toString() : String(s.backgroundId)) : null,
     imageUrl: s.imageAssetId && typeof s.imageAssetId === "object" ? (s.imageAssetId as unknown as { url: string }).url : null,
     videoUrl: s.videoAssetId && typeof s.videoAssetId === "object" ? (s.videoAssetId as unknown as { url: string }).url : null,
+    voiceUrl: s.voiceAssetId && typeof s.voiceAssetId === "object" ? (s.voiceAssetId as unknown as { url: string }).url : null,
     videoTaskId: s.videoTaskId ?? null,
     pendingVideoPrompt: s.pendingVideoPrompt ?? null,
     pendingVideoInstructions: s.pendingVideoInstructions ?? null,
