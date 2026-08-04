@@ -47,7 +47,8 @@ export async function withJobLifecycle(
     return result;
   } catch (err) {
     if (err instanceof ProviderQuotaExceededError && jobDoc.googleAccountId) {
-      await markAccountQuotaExceeded(jobDoc.googleAccountId.toString());
+      const resetsAt = err.retryAfterSeconds ? new Date(Date.now() + err.retryAfterSeconds * 1000) : undefined;
+      await markAccountQuotaExceeded(jobDoc.googleAccountId.toString(), resetsAt);
     }
 
     const maxAttempts = bullJob.opts.attempts ?? 1;

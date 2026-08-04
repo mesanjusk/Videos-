@@ -48,7 +48,17 @@ export function decryptAccountApiKey(account: HydratedDocument<GoogleAccountDoc>
   return decryptSecret(apiKeyEnc);
 }
 
-/** Called by a queue processor when a provider call reports quota exhaustion (ProviderQuotaExceededError). */
+/**
+ * Called by a queue processor when a provider call reports quota exhaustion (ProviderQuotaExceededError).
+ * Default cool-down is intentionally short (60s), not a full day: `wrapGeminiError` classifies any
+ * error whose message contains "quota", "rate limit", "429", or "RESOURCE_EXHAUSTED" as this same
+ * error type, and most of those in practice are a transient per-minute rate limit (especially since
+ * BullMQ retries a failed job 3x within ~15s, which alone can trip one) rather than the free tier's
+ * actual daily image/request cap. Confirmed live: a flat 24h lockout meant one rate-limit blip took
+ * an account out of rotation for a full day until someone noticed and clicked "Reactivate now" — and
+ * clicking that while the real rate limit was still active just re-tripped it immediately. Callers
+ * that *do* know the provider's real Retry-After value should still pass `resetsAt` explicitly.
+ */
 export async function markAccountQuotaExceeded(accountId: string, resetsAt?: Date): Promise<void> {
   await connectToDatabase();
   await GoogleAccount.updateOne(
@@ -56,7 +66,7 @@ export async function markAccountQuotaExceeded(accountId: string, resetsAt?: Dat
     {
       $set: {
         status: "quota_exceeded",
-        "quota.resetsAt": resetsAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000),
+        "quota.resetsAt": resetsAt ?? new Date(Date.now() + 60 * 1000),
       },
     },
   );
