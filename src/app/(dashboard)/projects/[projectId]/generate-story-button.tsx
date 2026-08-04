@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useJobPolling } from "@/hooks/use-job-polling";
 
 export function GenerateStoryButton({ projectId }: { projectId: string }) {
@@ -35,7 +36,8 @@ export function GenerateStoryButton({ projectId }: { projectId: string }) {
   const isWorking = starting || (job && !isDone);
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex w-full max-w-xs flex-col items-center gap-3">
+      {isWorking && <Progress value={null} />}
       <Button onClick={start} disabled={!!isWorking}>
         {isWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         {isWorking ? "Writing your story..." : "Generate story"}

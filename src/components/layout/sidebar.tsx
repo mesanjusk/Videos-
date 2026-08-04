@@ -13,11 +13,12 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
+/** Nav items + brand header, shared by the always-visible desktop <aside> and the mobile drawer (Sheet). */
+export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card/40 lg:flex">
+    <>
       <div className="flex h-16 items-center gap-2 px-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Clapperboard className="h-4 w-4" />
@@ -32,6 +33,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -43,6 +45,14 @@ export function Sidebar() {
           );
         })}
       </nav>
+    </>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card/40 lg:flex">
+      <SidebarNav />
     </aside>
   );
 }

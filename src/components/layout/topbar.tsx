@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "./theme-toggle";
+import { MobileSidebar } from "./mobile-sidebar";
 
 interface TopbarProps {
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -23,7 +24,10 @@ export function Topbar({ user }: TopbarProps) {
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border px-4 sm:px-6">
-      <div className="lg:hidden font-semibold">AI Video Studio</div>
+      <div className="flex items-center gap-2 lg:hidden">
+        <MobileSidebar />
+        <span className="font-semibold">AI Video Studio</span>
+      </div>
       <div className="ml-auto flex items-center gap-2">
         <Button asChild size="sm">
           <Link href="/projects/new">
