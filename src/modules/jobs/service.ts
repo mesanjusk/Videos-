@@ -60,6 +60,35 @@ export async function getJob(userId: string, jobId: string) {
   return Job.findOne({ _id: jobId, userId }).lean();
 }
 
+/**
+ * Cancels a job that's still waiting to be picked up. Only "queued" jobs are eligible — once a
+ * processor has flipped a job to "running" it's actively mid-work, and cancelling that safely
+ * would need cooperative cancellation inside every processor, not implemented here. Removes the
+ * BullMQ job too so it can't be dequeued later (e.g. by cron) after Mongo already calls it cancelled;
+ * if that removal fails (e.g. a race where BullMQ had just picked it up), the Mongo side still moves
+ * to "cancelled" — worst case the processor's own status write on completion "wins" back over it.
+ */
+export async function cancelJob(userId: string, jobId: string) {
+  await connectToDatabase();
+  const jobDoc = await Job.findOne({ _id: jobId, userId });
+  if (!jobDoc) return null;
+  if (jobDoc.status !== "queued") {
+    throw new Error("Only jobs still waiting in the queue can be cancelled.");
+  }
+
+  if (jobDoc.bullJobId) {
+    const queue = getQueue(jobDoc.type);
+    const bullJob = await queue.getJob(jobDoc.bullJobId);
+    await bullJob?.remove().catch(() => {
+      // best-effort — Mongo status below is the source of truth the UI reads
+    });
+  }
+
+  jobDoc.status = "cancelled";
+  await jobDoc.save();
+  return jobDoc;
+}
+
 export async function listRecentJobs(userId: string, limit = 10) {
   await connectToDatabase();
   return Job.find({ userId }).sort({ createdAt: -1 }).limit(limit).populate("projectId", "title").lean();

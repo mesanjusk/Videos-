@@ -7,7 +7,7 @@ import { getStorageUsageBytes } from "@/modules/assets/service";
 import { listGoogleAccounts } from "@/modules/accounts/service";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
-import { JobBadge } from "@/components/shared/job-badge";
+import { RecentActivity } from "./recent-activity";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -110,18 +110,7 @@ export default async function DashboardPage() {
             <CardTitle>Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
-            {recentJobs.length === 0 ? (
-              <EmptyState icon={Activity} title="Nothing yet" description="Generation jobs will show up here as soon as you start a project." />
-            ) : (
-              <ul className="space-y-3">
-                {recentJobs.map((job) => (
-                  <li key={job._id.toString()} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate text-muted-foreground">{job.type.replace(/_/g, " ")}</span>
-                    <JobBadge status={job.status} />
-                  </li>
-                ))}
-              </ul>
-            )}
+            <RecentActivity jobs={recentJobs.map((job) => ({ id: job._id.toString(), type: job.type, status: job.status }))} />
           </CardContent>
         </Card>
       </div>
