@@ -7,6 +7,8 @@ import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /** PDF Step 10 — Thumbnail. */
 export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -26,9 +28,11 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
     jobDoc.set("googleAccountId", accountId);
     await jobDoc.save();
 
-    const provider = getImageProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "image");
+    const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const title = project.storyJson?.title ?? project.title;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "thumbnail");
 
     const image = await provider.generateThumbnail(
       {
@@ -36,6 +40,7 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
         characterReferenceImages,
         style,
         description: project.premise ?? undefined,
+        templateOverride,
       },
       context,
     );

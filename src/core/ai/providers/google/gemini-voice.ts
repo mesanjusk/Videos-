@@ -10,7 +10,7 @@ export class GeminiVoiceProvider implements VoiceProvider {
 
   async generateVoice(input: VoiceGenerationInput, account?: GenerationAccountContext): Promise<GeneratedVoice> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(voiceTemplate, {
+    const prompt = renderTemplate(input.templateOverride ?? voiceTemplate, {
       gender: input.gender ?? "neutral",
       age: String(input.age ?? 12),
       tone: input.tone ?? "cheerful, energetic, funny",

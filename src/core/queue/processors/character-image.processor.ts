@@ -8,6 +8,8 @@ import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
 import type { CharacterPose } from "@/core/ai/types";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 const DEFAULT_POSES: CharacterPose[] = ["front-view", "happy", "walking-pose"];
 
@@ -27,8 +29,10 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     await jobDoc.save();
 
     const poses = (jobDoc.payload?.poses as CharacterPose[] | undefined) ?? DEFAULT_POSES;
-    const provider = getImageProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "image");
+    const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "character");
 
     const images = await provider.generateCharacterSheet(
       {
@@ -47,6 +51,7 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
         },
         poses,
         aspectRatio: "4:5",
+        templateOverride,
       },
       context,
     );

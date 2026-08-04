@@ -54,7 +54,17 @@ large diff.
       produces the image plus a title/description/tags (composed from already-generated data, not an
       extra AI call). New Edit & Export page ties render, thumbnail, music upload, and watermark
       together.
-- [ ] **Stage 6 — Prompt Library, Settings, polish.** Editable prompt templates UI (variables,
-      dependency-aware regeneration). Settings (theme, language, provider overrides, Cloudinary/Mongo
-      status). Empty states, loading skeletons, Framer Motion transitions, responsive pass. API
-      reference and deployment guide docs.
+- [x] **Stage 6 — Prompt Library, Settings, polish.** Prompt templates are now genuinely editable, not
+      just displayed: every generation `Input` type carries an optional `templateOverride`, every
+      Gemini/Google-Flow provider renders `templateOverride ?? <code default>`, and every processor
+      resolves the user's DB-stored template (`modules/prompt-templates/service.ts`, seeded from
+      `core/prompt-engine/templates/*.ts` on first access) before calling its provider — an edit in
+      `/prompts` changes real output on the next generation, with a one-click reset back to the
+      original text. Settings became interactive to match: per-capability provider overrides
+      (`Settings.providerOverrides`, read by every processor via `getProviderOverride`), default
+      language, and a live system-status panel (Mongo/Cloudinary/Redis configured or not). Polish
+      pass: `loading.tsx` skeletons on every data-fetching route, a Framer Motion page-transition
+      wrapper on the dashboard shell, and `HelpButton`s added to the two pages that were missing one
+      (project detail, the wizard) — every screen now explains itself per the beginner-friendly UX
+      requirement. `docs/database-schema.md`, `docs/api-reference.md`, and `docs/deployment.md` added,
+      reflecting the schema/routes/ops story as actually built, not as originally planned.

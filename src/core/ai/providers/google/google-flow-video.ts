@@ -20,7 +20,7 @@ export class GoogleFlowVideoProvider implements VideoProvider {
   readonly requiresManualHandoff = true;
 
   async generateVideo(input: VideoGenerationInput): Promise<VideoGenerationResult> {
-    const promptText = renderTemplate(sceneVideoTemplate, {
+    const promptText = renderTemplate(input.templateOverride ?? sceneVideoTemplate, {
       action: input.action,
       camera: input.camera,
       lighting: input.lighting,

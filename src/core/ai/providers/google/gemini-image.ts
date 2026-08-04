@@ -71,7 +71,7 @@ export class GeminiImageProvider implements ImageProvider {
   ): Promise<Record<CharacterPose, GeneratedImage>> {
     const client = getGeminiClient(account);
     const poses = input.poses.length > 0 ? input.poses : POSES;
-    const basePrompt = renderTemplate(characterTemplate, {
+    const basePrompt = renderTemplate(input.templateOverride ?? characterTemplate, {
       style: input.spec.style,
       age: input.spec.age ?? "",
       bodyType: input.spec.bodyType ?? "",
@@ -100,7 +100,7 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateBackground(input: BackgroundInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(backgroundTemplate, {
+    const prompt = renderTemplate(input.templateOverride ?? backgroundTemplate, {
       description: input.description,
       style: input.style,
       lighting: input.lighting,
@@ -115,7 +115,7 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateSceneImage(input: SceneImageInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(sceneImageTemplate, {
+    const prompt = renderTemplate(input.templateOverride ?? sceneImageTemplate, {
       action: input.action,
       cameraAngle: input.cameraAngle,
       emotion: input.emotion,
@@ -136,7 +136,7 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateThumbnail(input: ThumbnailInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(thumbnailTemplate, {
+    const prompt = renderTemplate(input.templateOverride ?? thumbnailTemplate, {
       style: input.style,
       title: input.title,
       aspectRatio: "1080x1920 (9:16)",

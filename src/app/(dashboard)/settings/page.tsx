@@ -1,27 +1,36 @@
 import { auth } from "@/core/auth/auth";
 import { listEnabledProviders } from "@/core/ai/registry";
+import { getOrCreateSettings } from "@/modules/settings/service";
+import { requireUserId } from "@/core/auth/session";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { HelpButton } from "@/components/shared/help-button";
+import { ProviderSettings } from "./provider-settings";
+import { LanguageSetting } from "./language-setting";
 
-/**
- * Minimal settings page for Stage 2 — theme + a read-only view of the provider registry so it's
- * clear the abstraction (ARCHITECTURE.md §2) is live. Editable provider overrides, prompt template
- * management, and notification preferences land in Stage 6.
- */
+function statusBadge(configured: boolean) {
+  return <Badge variant={configured ? "success" : "secondary"}>{configured ? "Connected" : "Not configured"}</Badge>;
+}
+
 export default async function SettingsPage() {
   const session = await auth();
+  const userId = await requireUserId();
+  const settings = await getOrCreateSettings(userId);
   const providers = listEnabledProviders();
-  const byCapability = {
-    story: providers.filter((p) => p.capability === "story"),
-    image: providers.filter((p) => p.capability === "image"),
-    video: providers.filter((p) => p.capability === "video"),
-    voice: providers.filter((p) => p.capability === "voice"),
-  };
+
+  const systemStatus = [
+    { label: "MongoDB Atlas", configured: !!process.env.MONGODB_URI },
+    { label: "Cloudinary", configured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) },
+    { label: "Upstash Redis (queue)", configured: !!process.env.REDIS_URL },
+  ];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <HelpButton text="Theme, default language, which AI provider each generation step uses, and the connection status of your storage/database/queue." />
+      </div>
 
       <Card>
         <CardHeader>
@@ -45,24 +54,46 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Language</CardTitle>
+          <CardDescription>Default language for new projects.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <LanguageSetting defaultLanguage={settings.defaultLanguage ?? "en"} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>AI providers</CardTitle>
           <CardDescription>
-            Every generation step runs through a provider-agnostic interface — this list is read-only for now;
-            per-project overrides land in a later update.
+            Every generation step runs through a provider-agnostic interface (ARCHITECTURE.md §2) — pick which
+            provider handles each step. Only Google services are enabled today; more can be added without
+            touching the rest of the app.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {Object.entries(byCapability).map(([capability, list]) => (
-            <div key={capability} className="flex items-center justify-between">
-              <span className="text-sm capitalize">{capability}</span>
-              <div className="flex gap-2">
-                {list.map((p) => (
-                  <Badge key={p.id} variant={p.enabled ? "success" : "secondary"}>
-                    {p.label}
-                    {!p.enabled && " (soon)"}
-                  </Badge>
-                ))}
-              </div>
+        <CardContent>
+          <ProviderSettings
+            providers={providers}
+            overrides={{
+              story: settings.providerOverrides?.story ?? undefined,
+              image: settings.providerOverrides?.image ?? undefined,
+              video: settings.providerOverrides?.video ?? undefined,
+              voice: settings.providerOverrides?.voice ?? undefined,
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>System status</CardTitle>
+          <CardDescription>Whether each piece of infrastructure is configured for this deployment.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {systemStatus.map((s) => (
+            <div key={s.label} className="flex items-center justify-between text-sm">
+              <span>{s.label}</span>
+              {statusBadge(s.configured)}
             </div>
           ))}
         </CardContent>

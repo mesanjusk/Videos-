@@ -39,7 +39,7 @@ export class GeminiStoryProvider implements StoryProvider {
   readonly label = "Google Gemini";
 
   async generateStory(input: StoryGenerationInput, account?: GenerationAccountContext): Promise<GeneratedStory> {
-    const prompt = renderTemplate(storyTemplate, {
+    const prompt = renderTemplate(input.templateOverride ?? storyTemplate, {
       premise: input.premise,
       language: input.language,
       sceneCount: String(input.sceneCount),

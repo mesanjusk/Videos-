@@ -9,6 +9,8 @@ import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /** PDF Step 4 — Scene Prompt Formula: character reference + background + action + camera + emotion + lighting + style. */
 export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -39,8 +41,10 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
     jobDoc.set("googleAccountId", accountId);
     await jobDoc.save();
 
-    const provider = getImageProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "image");
+    const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_image");
 
     const image = await provider.generateSceneImage(
       {
@@ -52,6 +56,7 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
         lighting: background?.lighting ?? "morning",
         style,
         aspectRatio: "4:5",
+        templateOverride,
       },
       context,
     );

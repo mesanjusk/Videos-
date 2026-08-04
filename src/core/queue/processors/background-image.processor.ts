@@ -7,6 +7,8 @@ import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /** PDF Step 3 — Create Backgrounds. */
 export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
@@ -25,8 +27,10 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
     jobDoc.set("googleAccountId", accountId);
     await jobDoc.save();
 
-    const provider = getImageProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "image");
+    const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "background");
 
     const image = await provider.generateBackground(
       {
@@ -35,6 +39,7 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
         style,
         lighting: background.lighting,
         aspectRatio: "4:5",
+        templateOverride,
       },
       context,
     );

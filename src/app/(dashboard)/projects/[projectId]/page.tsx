@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { HelpButton } from "@/components/shared/help-button";
 import { GenerateStoryButton } from "./generate-story-button";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -23,6 +24,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{project.title}</h1>
           <Badge variant="outline">{project.style}</Badge>
+          <HelpButton text="This is your project's home base. Generate the story first, then move on to characters, backgrounds, scenes, and finally editing & export." />
         </div>
         <p className="text-sm text-muted-foreground">
           {project.targetPlatform} · {project.durationSeconds}s · {project.language}

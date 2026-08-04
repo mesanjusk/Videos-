@@ -12,6 +12,7 @@ export default auth((req) => {
     req.nextUrl.pathname.startsWith("/dashboard") ||
     req.nextUrl.pathname.startsWith("/projects") ||
     req.nextUrl.pathname.startsWith("/accounts") ||
+    req.nextUrl.pathname.startsWith("/prompts") ||
     req.nextUrl.pathname.startsWith("/settings");
 
   if (isDashboardRoute && !isLoggedIn) {
@@ -24,5 +25,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/projects/:path*", "/accounts/:path*", "/settings/:path*"],
+  matcher: ["/dashboard/:path*", "/projects/:path*", "/accounts/:path*", "/prompts/:path*", "/settings/:path*"],
 };

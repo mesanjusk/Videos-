@@ -5,36 +5,37 @@ editing, thumbnail — guided end to end, with no prompt-writing required from t
 
 Workflow logic follows `COMPLETE_AI_CARTOON_WORKFLOW_2026.pdf`; implementation technology follows the
 approved stack (see `ARCHITECTURE.md` for the full rationale, especially why video generation is
-architected as a **manual hand-off** through Google Flow rather than an API call).
+architected as a **manual hand-off** through Google Flow rather than an API call — Flow has no public
+API — and why there's no music-*generation* provider — none of the brief's allowed services offer one).
 
 ## Status
 
-This repository is being built in stages (see `ARCHITECTURE.md` §11 and the task list in the PR/commit
-history). Stage 1 — the current commit — lays the foundation:
+Built in six staged commits on `claude/video-studio-architecture-wruz2h` (see `docs/roadmap.md` for
+what landed in each). All six are complete: auth, dashboard, the project wizard, story/character/
+background/scene generation through a BullMQ queue, the Google Flow video hand-off, voice generation,
+the FFmpeg render pipeline, thumbnail generation, the Google Account Manager, the editable Prompt
+Library, and Settings.
 
-- Project scaffold (Next.js 15, TypeScript, Tailwind, App Router)
-- `src/core/ai` — the provider-agnostic abstraction for story/image/video/voice generation
-- `src/core/prompt-engine` — centralized, editable prompt templates seeded from the PDF's formulas
-- `src/core/db` — MongoDB Atlas (Mongoose) connection + model registration
-- `src/modules/*` — feature-based domain modules and their Mongoose models
-- `src/modules/accounts` — the Google Account Manager (multi-account pooling, quota-aware rotation)
-
-Not yet implemented: auth, dashboard UI, project wizard, queue processors, FFmpeg render pipeline,
-and all page-level UI. See open tasks for the remaining stages.
-
-## Getting started (once a stage adds runnable UI)
+## Getting started
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in MongoDB Atlas, Cloudinary, Upstash Redis, Google OAuth, Gemini
+cp .env.example .env.local   # fill in MongoDB Atlas, Cloudinary, Upstash Redis, Google OAuth
 npm run dev
 ```
 
-`npm run typecheck` and `npm run lint` are safe to run against the current stage's code at any point.
+Then sign in and connect at least one Google account at `/accounts` (OAuth-confirm identity, then
+paste a free Gemini API key from [AI Studio](https://aistudio.google.com/app/apikey)) — nothing
+generates without one. See `docs/deployment.md` for the full production setup, including the two ways
+to run the job queue (Vercel's serverless tick vs. the standalone `worker.ts`).
+
+`npm run typecheck`, `npm run lint`, and `npm run build` are all clean against the current code.
 
 ## Documentation
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — system design: provider abstraction, Google Account Manager,
   data model, API surface, queue-on-Vercel strategy, prompt engine, FFmpeg pipeline, folder structure.
-- `docs/` — deeper references added alongside the stage that needs them (database schema, API
-  reference, deployment guide).
+- [`docs/database-schema.md`](./docs/database-schema.md) — every MongoDB collection, as actually shipped.
+- [`docs/api-reference.md`](./docs/api-reference.md) — every route.
+- [`docs/deployment.md`](./docs/deployment.md) — provisioning the free-tier services and deploying.
+- [`docs/roadmap.md`](./docs/roadmap.md) — what landed in each of the six build stages.

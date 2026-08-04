@@ -7,6 +7,8 @@ import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getVoiceProvider } from "@/core/ai/registry";
 import { uploadAudioAsset } from "@/core/storage/cloudinary";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /** PDF Step 6 — Voice. */
 export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -24,7 +26,9 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
     jobDoc.set("googleAccountId", accountId);
     await jobDoc.save();
 
-    const provider = getVoiceProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "voice");
+    const provider = getVoiceProvider(providerId);
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "voice");
     const voice = await provider.generateVoice(
       {
         text: scene.dialogue,
@@ -32,6 +36,7 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
         gender: primaryCharacter?.voiceProfile?.gender ?? undefined,
         age: primaryCharacter?.voiceProfile?.age ?? undefined,
         tone: primaryCharacter?.voiceProfile?.tone ?? undefined,
+        templateOverride,
       },
       context,
     );

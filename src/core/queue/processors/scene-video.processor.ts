@@ -4,6 +4,8 @@ import { Project } from "@/modules/projects/models/Project";
 import { Scene } from "@/modules/scenes/models/Scene";
 import { Character } from "@/modules/characters/models/Character";
 import { getVideoProvider } from "@/core/ai/registry";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /**
  * PDF Step 5 — Generate Videos. The only registered VideoProvider today (Google Flow) has no API —
@@ -29,8 +31,10 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
       })
       .filter((r): r is { url: string; description: string } => !!r?.url);
 
-    const provider = getVideoProvider();
+    const providerId = await getProviderOverride(jobDoc.userId, "video");
+    const provider = getVideoProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_video");
 
     const result = await provider.generateVideo({
       sceneId: scene._id.toString(),
@@ -41,6 +45,7 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
       emotion: scene.emotion,
       durationSeconds: 8,
       style,
+      templateOverride,
     });
 
     if (result.status === "manual_pending") {

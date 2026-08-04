@@ -5,6 +5,8 @@ import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getStoryProvider } from "@/core/ai/registry";
 import { createScenesFromStory } from "@/modules/scenes/service";
+import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
+import { getProviderOverride } from "@/modules/settings/service";
 
 /** PDF Step 1 — Write the Story. */
 export async function processStoryJob(bullJob: BullJob<BullJobData>) {
@@ -22,7 +24,9 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     // reasonable follow-up but isn't implemented yet.
     const premise = project.storyInputMode === "script" ? (project.pastedScript ?? "") : (project.premise ?? "");
 
-    const provider = getStoryProvider();
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "story");
+    const providerId = await getProviderOverride(jobDoc.userId, "story");
+    const provider = getStoryProvider(providerId);
     const story = await provider.generateStory(
       {
         premise,
@@ -30,6 +34,7 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
         sceneCount: 8,
         characterCount: 2,
         targetDurationSeconds: project.durationSeconds,
+        templateOverride,
       },
       context,
     );

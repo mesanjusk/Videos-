@@ -6,6 +6,14 @@
  * plus `registry.ts` — adding a new provider means adding one file under
  * `providers/<vendor>/` and one line in the registry, never a change here.
  */
+import type { PromptTemplateDefinition } from "@/core/prompt-engine/types";
+
+/**
+ * Every generation input below carries an optional `templateOverride` — the user's DB-edited
+ * template for that scope (modules/prompt-templates), resolved by the queue processor and passed
+ * through so each provider renders the user's version instead of its own hardcoded default when one
+ * exists. This is what makes the Prompt Library's edits actually affect generation, not just display.
+ */
 
 // ── Shared ────────────────────────────────────────────────────────────────
 
@@ -51,6 +59,7 @@ export interface StoryGenerationInput {
   characterCount: number;
   tone?: string;
   targetDurationSeconds?: number;
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface StoryProvider {
@@ -99,6 +108,7 @@ export interface CharacterSheetInput {
   spec: CharacterSpec;
   poses: CharacterPose[];
   aspectRatio: "4:5";
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface BackgroundInput {
@@ -107,6 +117,7 @@ export interface BackgroundInput {
   style: string;
   lighting: string;
   aspectRatio: "4:5";
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface SceneImageInput {
@@ -118,6 +129,7 @@ export interface SceneImageInput {
   lighting: string;
   style: string;
   aspectRatio: "4:5";
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface ThumbnailInput {
@@ -125,6 +137,7 @@ export interface ThumbnailInput {
   characterReferenceImages: { url: string; description: string }[];
   style: string;
   description?: string;
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface ImageProvider {
@@ -151,6 +164,7 @@ export interface VideoGenerationInput {
   emotion: string;
   durationSeconds: number; // clamp 5-8 per PDF pro-tip
   style: string;
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export type VideoGenerationResult =
@@ -180,6 +194,7 @@ export interface VoiceGenerationInput {
   gender?: "male" | "female" | "neutral";
   age?: number;
   tone?: string; // cheerful, energetic, funny, calm, ...
+  templateOverride?: PromptTemplateDefinition;
 }
 
 export interface GeneratedVoice {
