@@ -33,7 +33,16 @@ export async function addGoogleAccount(input: AddGoogleAccountInput) {
 
 export async function setAccountStatus(userId: string, accountId: string, status: "active" | "disabled") {
   await connectToDatabase();
-  await GoogleAccount.updateOne({ _id: accountId, userId }, { $set: { status } });
+  // Re-activating clears the quota tracking too — otherwise flipping a quota_exceeded account back
+  // to "active" from the UI would leave stale quota.used/resetsAt behind, and selectGoogleAccount()
+  // (which only checks `status`, not these fields directly) would work anyway, but the account's
+  // quota display would keep showing the old exhausted numbers.
+  await GoogleAccount.updateOne(
+    { _id: accountId, userId },
+    status === "active"
+      ? { $set: { status, "quota.used": 0 }, $unset: { "quota.resetsAt": "" } }
+      : { $set: { status } },
+  );
 }
 
 export async function setDefaultAccount(userId: string, accountId: string) {

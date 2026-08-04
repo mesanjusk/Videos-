@@ -130,8 +130,10 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
                           Set as default
                         </DropdownMenuItem>
                       )}
-                      {account.status === "disabled" ? (
-                        <DropdownMenuItem onSelect={() => performAction(account.id, "enable")}>Enable</DropdownMenuItem>
+                      {account.status !== "active" ? (
+                        <DropdownMenuItem onSelect={() => performAction(account.id, "enable")}>
+                          {account.status === "quota_exceeded" ? "Reactivate now" : "Enable"}
+                        </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem onSelect={() => performAction(account.id, "disable")}>Disable</DropdownMenuItem>
                       )}

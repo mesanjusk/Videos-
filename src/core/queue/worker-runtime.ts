@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { getRedisConnection } from "./connection";
 import { processorRegistry } from "./processors";
 import { getQueue } from "./queues";
+import { reactivateExpiredQuotas } from "@/modules/accounts/selector";
 import type { JobType } from "@/modules/jobs/models/Job";
 
 const DEFAULT_BUDGET_MS = Number(process.env.QUEUE_TICK_BUDGET_MS ?? 45_000);
@@ -18,6 +19,11 @@ function sleep(ms: number): Promise<void> {
  * job is enqueued (for low latency).
  */
 export async function runQueueTick(budgetMs: number = DEFAULT_BUDGET_MS): Promise<{ types: string[] }> {
+  // Was defined but never called anywhere (confirmed live: a quota_exceeded account had no path
+  // back to "active" short of manually clicking Reactivate now in the Accounts UI) — every tick is
+  // a reasonable place to sweep for accounts whose 24h quota.resetsAt has passed.
+  await reactivateExpiredQuotas().catch((err) => console.error("[queue] reactivateExpiredQuotas failed:", err));
+
   const connection = getRedisConnection();
   const entries = Object.entries(processorRegistry) as Array<
     [string, NonNullable<(typeof processorRegistry)[keyof typeof processorRegistry]>]

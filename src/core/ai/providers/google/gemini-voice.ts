@@ -19,7 +19,7 @@ export class GeminiVoiceProvider implements VoiceProvider {
 
     try {
       const response = await client.models.generateContent({
-        model: process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-tts",
+        model: process.env.GEMINI_TTS_MODEL ?? "gemini-2.5-flash-preview-tts",
         contents: prompt,
         config: {
           responseModalities: ["AUDIO"],

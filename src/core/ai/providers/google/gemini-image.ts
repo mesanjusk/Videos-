@@ -44,7 +44,7 @@ async function generateImage(
   }
 
   const response = await client.models.generateContent({
-    model: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3-pro-image",
+    model: process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     contents: [{ role: "user", parts }],
   });
 
