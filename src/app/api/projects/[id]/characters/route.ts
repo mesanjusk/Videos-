@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const parsed = createCharacterSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Invalid input", issues: parsed.error.flatten() }, { status: 400 });
 
-    const character = await createCharacter(userId, projectId, parsed.data);
+    const character = await createCharacter(userId, parsed.data, projectId);
     const job = await enqueueJob({
       userId,
       projectId,

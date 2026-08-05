@@ -3,23 +3,13 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Check, Image as ImageIcon, Loader2, Sparkles, Users } from "lucide-react";
+import { Check, Image as ImageIcon, Loader2, Sparkles } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/shared/empty-state";
-
-export interface LibraryCharacterItem {
-  id: string;
-  name: string;
-  role?: string;
-  sourceProjectId: string;
-  sourceProjectTitle: string;
-  coverUrl: string | null;
-}
 
 export interface LibraryBackgroundItem {
   id: string;
@@ -36,79 +26,42 @@ export interface LibraryProjectOption {
 }
 
 export function LibraryManager({
-  characters,
   backgrounds,
   projects,
   targetProjectId,
 }: {
-  characters: LibraryCharacterItem[];
   backgrounds: LibraryBackgroundItem[];
   projects: LibraryProjectOption[];
   targetProjectId: string | null;
 }) {
+  if (backgrounds.length === 0) {
+    return (
+      <EmptyState
+        icon={ImageIcon}
+        title="No backgrounds yet"
+        description="Backgrounds you create in any project will show up here so you can reuse them elsewhere."
+      />
+    );
+  }
+
   return (
-    <Tabs defaultValue="characters">
-      <TabsList>
-        <TabsTrigger value="characters">Characters ({characters.length})</TabsTrigger>
-        <TabsTrigger value="backgrounds">Backgrounds ({backgrounds.length})</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="characters">
-        {characters.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No characters yet"
-            description="Characters you create in any project will show up here so you can reuse them elsewhere."
-          />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {characters.map((c) => (
-              <LibraryCard
-                key={c.id}
-                name={c.name}
-                subtitle={c.role}
-                sourceProjectId={c.sourceProjectId}
-                sourceProjectTitle={c.sourceProjectTitle}
-                coverUrl={c.coverUrl}
-                fallbackIcon={Users}
-                projects={projects}
-                targetProjectId={targetProjectId}
-                cloneEndpoint={`/api/characters/${c.id}/clone`}
-                backHrefSuffix="characters"
-              />
-            ))}
-          </div>
-        )}
-      </TabsContent>
-
-      <TabsContent value="backgrounds">
-        {backgrounds.length === 0 ? (
-          <EmptyState
-            icon={ImageIcon}
-            title="No backgrounds yet"
-            description="Backgrounds you create in any project will show up here so you can reuse them elsewhere."
-          />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {backgrounds.map((b) => (
-              <LibraryCard
-                key={b.id}
-                name={b.name}
-                subtitle={b.category}
-                sourceProjectId={b.sourceProjectId}
-                sourceProjectTitle={b.sourceProjectTitle}
-                coverUrl={b.coverUrl}
-                fallbackIcon={ImageIcon}
-                projects={projects}
-                targetProjectId={targetProjectId}
-                cloneEndpoint={`/api/backgrounds/${b.id}/clone`}
-                backHrefSuffix="backgrounds"
-              />
-            ))}
-          </div>
-        )}
-      </TabsContent>
-    </Tabs>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {backgrounds.map((b) => (
+        <LibraryCard
+          key={b.id}
+          name={b.name}
+          subtitle={b.category}
+          sourceProjectId={b.sourceProjectId}
+          sourceProjectTitle={b.sourceProjectTitle}
+          coverUrl={b.coverUrl}
+          fallbackIcon={ImageIcon}
+          projects={projects}
+          targetProjectId={targetProjectId}
+          cloneEndpoint={`/api/backgrounds/${b.id}/clone`}
+          backHrefSuffix="backgrounds"
+        />
+      ))}
+    </div>
   );
 }
 
@@ -129,11 +82,11 @@ function LibraryCard({
   sourceProjectId: string;
   sourceProjectTitle: string;
   coverUrl: string | null;
-  fallbackIcon: typeof Users;
+  fallbackIcon: typeof ImageIcon;
   projects: LibraryProjectOption[];
   targetProjectId: string | null;
   cloneEndpoint: string;
-  backHrefSuffix: "characters" | "backgrounds";
+  backHrefSuffix: "backgrounds";
 }) {
   const [pickerProjectId, setPickerProjectId] = useState<string>("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");

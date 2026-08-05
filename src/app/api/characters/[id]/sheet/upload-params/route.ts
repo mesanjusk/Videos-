@@ -12,6 +12,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const { id: characterId } = await params;
     const character = await getCharacter(userId, characterId);
     if (!character) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!character.projectId) {
+      return NextResponse.json({ error: "Assign this character to a project before uploading an image" }, { status: 400 });
+    }
 
     const signed = getSignedUploadParams(`projects/${character.projectId.toString()}/characters/${characterId}`);
     return NextResponse.json(signed);
