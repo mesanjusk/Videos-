@@ -39,6 +39,21 @@ export async function deleteCharacter(userId: string, characterId: string) {
   await Character.deleteOne({ _id: characterId, userId });
 }
 
+/**
+ * Replaces a character's sheet with a single user-uploaded reference image, stored under the
+ * "front-view" pose — the only pose every downstream consumer (scene image/video, thumbnail
+ * processors) actually reads (see core/queue/processors/*.ts). Lets a user skip AI generation
+ * entirely and supply their own character art.
+ */
+export async function setCharacterCustomImage(userId: string, characterId: string, assetId: string) {
+  await connectToDatabase();
+  return Character.findOneAndUpdate(
+    { _id: characterId, userId },
+    { $set: { sheetAssets: [{ pose: "front-view", assetId }] } },
+    { new: true },
+  );
+}
+
 /** Every character the user owns, across all projects — backs the /library page (character memory). */
 export async function listAllCharactersForUser(userId: string) {
   await connectToDatabase();

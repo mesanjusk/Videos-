@@ -31,6 +31,12 @@ export async function deleteBackground(userId: string, backgroundId: string) {
   await Background.deleteOne({ _id: backgroundId, userId });
 }
 
+/** Replaces a background's image with a user-uploaded one, skipping AI generation entirely. */
+export async function setBackgroundCustomImage(userId: string, backgroundId: string, assetId: string) {
+  await connectToDatabase();
+  return Background.findOneAndUpdate({ _id: backgroundId, userId }, { $set: { assetId } }, { new: true });
+}
+
 /** Every background the user owns, across all projects — backs the /library page. */
 export async function listAllBackgroundsForUser(userId: string) {
   await connectToDatabase();

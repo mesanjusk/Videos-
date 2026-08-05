@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Image as ImageIcon, LibraryBig, Loader2, MoreVertical, Plus, RefreshCcw } from "lucide-react";
+import { Image as ImageIcon, LibraryBig, Loader2, MoreVertical, Plus, RefreshCcw, UploadCloud } from "lucide-react";
 import { createBackgroundSchema, type CreateBackgroundInput } from "@/modules/backgrounds/schema";
 import { BACKGROUND_CATEGORIES } from "@/modules/backgrounds/constants";
+import { useCloudinaryUpload } from "@/hooks/use-cloudinary-upload";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -125,17 +126,32 @@ function BackgroundCard({
 }) {
   const router = useRouter();
   const { job, isDone } = useJobPolling(pendingJobId);
+  const { upload, uploading, error: uploadError } = useCloudinaryUpload(`/api/backgrounds/${background.id}/image/upload-params`);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isDone) router.refresh();
   }, [isDone, router]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploaded = await upload(file);
+    if (!uploaded) return;
+    await fetch(`/api/backgrounds/${background.id}/image/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(uploaded),
+    });
+    router.refresh();
+  }
 
   const isGenerating = pendingJobId && !isDone;
 
   return (
     <Card>
       <div className="aspect-[4/5] w-full overflow-hidden rounded-t-xl bg-muted">
-        {isGenerating ? (
+        {isGenerating || uploading ? (
           <Skeleton className="h-full w-full rounded-none" />
         ) : background.url ? (
           <Image src={background.url} alt={background.name} width={400} height={500} className="h-full w-full object-cover" />
@@ -155,7 +171,14 @@ function BackgroundCard({
               Generating...
             </p>
           )}
+          {uploading && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Uploading...
+            </p>
+          )}
           {job?.status === "failed" && <p className="mt-1 text-xs text-destructive">{job.error}</p>}
+          {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -166,13 +189,18 @@ function BackgroundCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={onRegenerate} disabled={!!isGenerating}>
               <RefreshCcw className="h-4 w-4" />
-              Regenerate
+              Regenerate with AI
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => fileInputRef.current?.click()} disabled={uploading}>
+              <UploadCloud className="h-4 w-4" />
+              Upload my own image
             </DropdownMenuItem>
             <DropdownMenuItem className="text-destructive" onSelect={onDelete}>
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
       </CardContent>
     </Card>
   );
