@@ -22,8 +22,9 @@ export interface ProcessorResult extends Record<string, unknown> {
  * account exhausted so the *next* attempt (BullMQ's own retry/backoff) picks a different account via
  * `resolveGenerationAccount` — the rotation described in ARCHITECTURE.md §3 happens for free just by
  * retrying, no special-cased retry logic needed here. `Job.status` only flips to `failed` once BullMQ
- * has exhausted its attempts; earlier failures leave it `queued`/`running` so the UI doesn't flash
- * "failed" for a transient error that's about to succeed on retry.
+ * has exhausted its attempts; a non-final failure flips it to `retrying` (with the transient error
+ * recorded) instead of leaving it stuck on `running`, so the Scene Queue can show a job that's
+ * backing off before its next attempt as what it actually is, not as still in progress.
  */
 export async function withJobLifecycle(
   bullJob: BullJob<BullJobData>,
@@ -53,18 +54,16 @@ export async function withJobLifecycle(
 
     const maxAttempts = bullJob.opts.attempts ?? 1;
     const isFinalAttempt = bullJob.attemptsMade + 1 >= maxAttempts;
-    if (isFinalAttempt) {
-      jobDoc.status = "failed";
-      jobDoc.error = err instanceof Error ? err.message : String(err);
-      try {
-        await jobDoc.save();
-      } catch (saveErr) {
-        // If persisting "failed" itself throws (e.g. a schema bug — this exact scenario happened
-        // live with a wrongly `required` payload field), the job doc would otherwise stay stuck at
-        // "queued"/"running" forever with no trace of why, since the original `err` below still gets
-        // thrown but nothing ever recorded it against the job the UI is polling. Log it loudly instead.
-        console.error(`[queue] failed to persist "failed" status for job ${jobDoc._id}:`, saveErr);
-      }
+    jobDoc.status = isFinalAttempt ? "failed" : "retrying";
+    jobDoc.error = err instanceof Error ? err.message : String(err);
+    try {
+      await jobDoc.save();
+    } catch (saveErr) {
+      // If persisting the status itself throws (e.g. a schema bug — this exact scenario happened
+      // live with a wrongly `required` payload field), the job doc would otherwise stay stuck at
+      // "queued"/"running" forever with no trace of why, since the original `err` below still gets
+      // thrown but nothing ever recorded it against the job the UI is polling. Log it loudly instead.
+      console.error(`[queue] failed to persist "${jobDoc.status}" status for job ${jobDoc._id}:`, saveErr);
     }
     throw err; // rethrow so BullMQ's own attempts/backoff bookkeeping still applies
   }
