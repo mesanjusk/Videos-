@@ -1,14 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
 import { createProjectSchema, type CreateProjectInput } from "@/modules/projects/schema";
 import { VIDEO_STYLES } from "@/modules/projects/constants";
 import { Stepper } from "@/components/shared/stepper";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,10 +21,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+export interface WizardLibraryCharacter {
+  id: string;
+  name: string;
+  role?: string;
+  coverUrl: string | null;
+}
+
 const STEPS = [
   { label: "Basics", description: "Name, language, platform" },
   { label: "Style", description: "How it should look" },
   { label: "Story", description: "Your idea or script" },
+  { label: "Cast", description: "Reuse existing characters" },
   { label: "Generate", description: "Review & create" },
 ];
 
@@ -31,12 +41,18 @@ const STEP_FIELDS: (keyof CreateProjectInput)[][] = [
   ["style", "customStyleDescription"],
   ["storyInputMode", "premise", "pastedScript"],
   [],
+  [],
 ];
 
-export function ProjectWizard() {
+export function ProjectWizard({ libraryCharacters }: { libraryCharacters: WizardLibraryCharacter[] }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
+
+  function toggleCharacter(id: string) {
+    setSelectedCharacterIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
 
   const form = useForm<CreateProjectInput>({
     resolver: zodResolver(createProjectSchema),
@@ -79,6 +95,21 @@ export function ProjectWizard() {
       return;
     }
     const { project } = await res.json();
+
+    if (selectedCharacterIds.length > 0) {
+      // Best-effort: the project already exists at this point, so a failed assignment here isn't
+      // worth blocking on — the user can still assign from the Characters page or Character Library.
+      await Promise.all(
+        selectedCharacterIds.map((characterId) =>
+          fetch(`/api/characters/${characterId}/clone`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetProjectId: project._id }),
+          }).catch(() => {}),
+        ),
+      );
+    }
+
     router.push(`/projects/${project._id}`);
   }
 
@@ -248,6 +279,53 @@ export function ProjectWizard() {
 
                 {step === 3 && (
                   <div className="space-y-4">
+                    <Label>Reuse characters from your library (optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Already have a cast from another project? Assign them here instead of recreating them — you can
+                      also add new characters and reuse more later from the project&rsquo;s Characters page.
+                    </p>
+                    {libraryCharacters.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                        No characters in your library yet — you&rsquo;ll create them fresh for this project.
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {libraryCharacters.map((c) => {
+                          const selected = selectedCharacterIds.includes(c.id);
+                          return (
+                            <button
+                              type="button"
+                              key={c.id}
+                              onClick={() => toggleCharacter(c.id)}
+                              className={cn(
+                                "flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-colors",
+                                selected ? "border-primary bg-primary/5" : "border-input hover:bg-accent",
+                              )}
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                                {c.coverUrl ? (
+                                  <Image src={c.coverUrl} alt={c.name} width={40} height={40} className="h-full w-full object-cover" />
+                                ) : (
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarFallback>{c.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-medium">{c.name}</p>
+                                {c.role && <p className="truncate text-xs text-muted-foreground">{c.role}</p>}
+                              </div>
+                              {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {step === 4 && (
+                  <div className="space-y-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Sparkles className="h-5 w-5" />
                       <p className="font-medium">Ready to create</p>
@@ -261,6 +339,10 @@ export function ProjectWizard() {
                       <dd className="text-right capitalize">{values.targetPlatform}</dd>
                       <dt className="text-muted-foreground">Duration</dt>
                       <dd className="text-right">{values.durationSeconds}s</dd>
+                      <dt className="text-muted-foreground">Cast</dt>
+                      <dd className="text-right">
+                        {selectedCharacterIds.length > 0 ? `${selectedCharacterIds.length} from library` : "None yet"}
+                      </dd>
                     </dl>
                     <p className="text-sm text-muted-foreground">
                       We&rsquo;ll save this project and take you straight to story generation.

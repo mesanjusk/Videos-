@@ -1,20 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Camera, Clapperboard, Film, Smile, Sparkles, Users, Image as ImageIcon } from "lucide-react";
+import { Camera, Clapperboard, Film, History, Smile, Sparkles, Users, Image as ImageIcon } from "lucide-react";
 import { requireUserId } from "@/core/auth/session";
 import { getProject } from "@/modules/projects/service";
+import { listJobsForProject } from "@/modules/jobs/service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { HelpButton } from "@/components/shared/help-button";
+import { EmptyState } from "@/components/shared/empty-state";
+import { JobBadge } from "@/components/shared/job-badge";
 import { GenerateStoryButton } from "./generate-story-button";
 import { PipelineModeToggle } from "./pipeline-mode-toggle";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const userId = await requireUserId();
   const { projectId } = await params;
-  const project = await getProject(userId, projectId);
+  const [project, jobs] = await Promise.all([getProject(userId, projectId), listJobsForProject(userId, projectId)]);
   if (!project) notFound();
 
   const hasStory = (project.storyJson?.scenes?.length ?? 0) > 0;
@@ -130,6 +133,41 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </Card>
         </>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            History
+          </CardTitle>
+          <CardDescription>Every generation job run for this project, newest first.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {jobs.length === 0 ? (
+            <EmptyState icon={History} title="No activity yet" description="Generation jobs for this project will show up here." />
+          ) : (
+            <ul className="space-y-3">
+              {jobs.map((job) => (
+                <li key={job._id.toString()} className="flex items-start justify-between gap-3 border-b border-border pb-3 text-sm last:border-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate">
+                      {job.type.replace(/_/g, " ")}
+                      {job.characterId && typeof job.characterId === "object" && (job.characterId as { name?: string }).name
+                        ? ` — ${(job.characterId as { name?: string }).name}`
+                        : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</p>
+                    {job.error && <p className="mt-1 text-xs text-destructive">{job.error}</p>}
+                  </div>
+                  <div className="shrink-0">
+                    <JobBadge status={job.status} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

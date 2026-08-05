@@ -144,7 +144,16 @@ before Module 2 starts, per the requested workflow.
       TODO/known boundary: a character with no home project yet can't generate or upload a reference
       image until it's assigned to at least one project (Job/Asset still require a `projectId` —
       loosening that is Asset/Job-model work, out of scope here; flagged for a future pass if wanted).
-- [ ] Module 2 — Project Manager. Pending confirmation on Module 1.
-- [ ] Module 3 — Scene Queue.
+- [x] **Module 2 — Project Manager.** Kept the existing model/service (already the right shape —
+      story/characters/scenes/voice/assets/thumbnail/metadata/status all persist through refresh via
+      MongoDB) and closed the two concrete gaps: (1) a **History** panel on the project detail page —
+      every `Job` ever run for the project, newest first, with type/character/status/error/timestamp,
+      via a new `listJobsForProject` — operationalizing the "History" field the original spec asked
+      for without a new collection, since `Job` already carried everything needed. (2) The project
+      creation wizard gained a **Cast** step: pick existing Character Library entries to assign to
+      the new project (via the same `assignCharacterToProject` from Module 1) right at creation time,
+      instead of the only reuse entry point being inside a project's Characters page after the fact —
+      the most natural moment to act on "reuse existing characters instead of recreating them."
+- [ ] Module 3 — Scene Queue. Pending confirmation on Module 2.
 - [ ] Module 4 — Browser Automation Engine.
 - [ ] Module 5 — Quality Verification + Auto Retry.

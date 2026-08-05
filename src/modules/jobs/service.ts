@@ -94,6 +94,12 @@ export async function listRecentJobs(userId: string, limit = 10) {
   return Job.find({ userId }).sort({ createdAt: -1 }).limit(limit).populate("projectId", "title").lean();
 }
 
+/** Every job ever run for this project, newest first — the Project Manager's activity/history timeline. */
+export async function listJobsForProject(userId: string, projectId: string, limit = 50) {
+  await connectToDatabase();
+  return Job.find({ userId, projectId }).sort({ createdAt: -1 }).limit(limit).populate("characterId", "name").lean();
+}
+
 export async function countJobsByStatus(userId: string): Promise<Record<JobStatus, number>> {
   await connectToDatabase();
   const rows = await Job.aggregate<{ _id: JobStatus; count: number }>([
