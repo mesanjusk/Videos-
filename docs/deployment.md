@@ -75,7 +75,33 @@ somewhere with no per-invocation time limit — Railway, Fly.io, or any VPS — 
 `MONGODB_URI`/`REDIS_URL`/`CLOUDINARY_*`. It shares the exact same processor code as the serverless
 tick; nothing else changes.
 
-## 6. Post-deploy checklist
+## 6. Browser Automation Engine (optional, worker.ts only)
+
+Module 4's automated Google Flow video generation (`scene_video_auto` jobs) only runs inside
+`worker.ts` — see `core/queue/worker-only-processors.ts` for why it's deliberately excluded from the
+Vercel-serverless tick. Skip this section entirely if you're fine with the always-manual Flow
+hand-off (the default, and the only path if you don't run `worker.ts` at all).
+
+To enable it:
+
+1. Run `worker.ts` per §5 above (Railway/Fly.io/a VPS — anywhere always-on).
+2. On that host specifically (not Vercel), run `npx playwright install --with-deps chromium` once.
+   Leave `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` **unset** there so a redeploy/dependency update
+   re-fetches the browser binary as needed; it should stay **set** in Vercel's env vars, where
+   Chromium is never used and there's no reason to pay the install time/bandwidth.
+3. In the app, on `/accounts`, open a connected Google account's menu → "Connect Flow browser
+   session (beta)" and follow the in-app instructions: log into that account once with
+   `npx playwright codegen labs.google/flow`, export `context.storageState()`, paste the JSON in.
+   This is the one manual step that's never automated — see ARCHITECTURE.md §13 for why.
+4. In a project's Scene Manager, a scene's video section now shows a second "Try browser automation
+   (beta)" button alongside the always-available manual one.
+
+Automating a Google product's web UI is inherently fragile — no public DOM contract, and Flow's UI
+can change without notice. Expect to recalibrate `core/automation/selectors.ts` against the live
+product before this works end to end; every automation attempt falls back to the existing manual
+hand-off on any unexpected page state rather than hanging or retrying blindly.
+
+## 7. Post-deploy checklist
 
 - [ ] Sign in once, then visit `/accounts` and connect at least one Google account (OAuth-confirm
       identity, then paste a Gemini API key from AI Studio) — nothing generates without one.

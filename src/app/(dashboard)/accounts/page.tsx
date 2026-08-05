@@ -17,6 +17,7 @@ export default async function AccountsPage() {
     quotaUsed: a.quota?.used ?? 0,
     quotaLimit: a.quota?.dailyLimit ?? 0,
     lastUsedAt: a.lastUsedAt ? new Date(a.lastUsedAt).toISOString() : null,
+    flowSessionConnected: !!a.flowSessionConnectedAt,
   }));
 
   return (

@@ -1,6 +1,6 @@
 import { connectToDatabase } from "@/core/db/mongoose";
 import { GoogleAccount } from "./models/GoogleAccount";
-import { encryptSecret } from "@/core/auth/encryption";
+import { encryptSecret, decryptSecret } from "@/core/auth/encryption";
 import type { GenerationAccountContext } from "@/core/ai/types";
 import { selectGoogleAccount, decryptAccountApiKey } from "./selector";
 
@@ -14,6 +14,8 @@ export interface AddGoogleAccountInput {
 
 export async function listGoogleAccounts(userId: string) {
   await connectToDatabase();
+  // credentials.flowSessionStateEnc is excluded (like apiKeyEnc) — flowSessionConnectedAt alone is
+  // enough for the UI to show a connected/not-connected badge without ever sending the ciphertext.
   return GoogleAccount.find({ userId }).select("-credentials").sort({ isDefault: -1, createdAt: 1 }).lean();
 }
 
@@ -54,6 +56,56 @@ export async function setDefaultAccount(userId: string, accountId: string) {
 export async function removeGoogleAccount(userId: string, accountId: string) {
   await connectToDatabase();
   await GoogleAccount.deleteOne({ _id: accountId, userId });
+}
+
+/**
+ * Stores this account's Google Flow browser session (a Playwright `storageState()` export from a
+ * browser where the operator manually logged in once) so the Browser Automation Engine can reuse
+ * it — encrypted the same way as the Gemini API key, never sent back to the client. We deliberately
+ * never automate the login itself; this is the one-time manual step that makes automation possible
+ * afterward. `storageStateJson` is validated by the caller's Zod schema, not here.
+ */
+export async function saveFlowSessionState(userId: string, accountId: string, storageStateJson: string) {
+  await connectToDatabase();
+  await GoogleAccount.updateOne(
+    { _id: accountId, userId },
+    { $set: { "credentials.flowSessionStateEnc": encryptSecret(storageStateJson), flowSessionConnectedAt: new Date() } },
+  );
+}
+
+export async function clearFlowSessionState(userId: string, accountId: string) {
+  await connectToDatabase();
+  await GoogleAccount.updateOne(
+    { _id: accountId, userId },
+    { $unset: { "credentials.flowSessionStateEnc": "", flowSessionConnectedAt: "" } },
+  );
+}
+
+/**
+ * Decrypts a connected account's Flow session for the Browser Automation Engine. Only ever called
+ * from worker-only code (core/queue/worker-only-processors.ts via worker.ts) — never from a route
+ * or anything reachable from the Next.js/Vercel bundle.
+ */
+export async function getDecryptedFlowSessionState(userId: string, accountId: string): Promise<string | null> {
+  await connectToDatabase();
+  const account = await GoogleAccount.findOne({ _id: accountId, userId }).select("credentials.flowSessionStateEnc").lean();
+  const enc = account?.credentials?.flowSessionStateEnc;
+  return enc ? decryptSecret(enc) : null;
+}
+
+/**
+ * The one active account with a connected Flow browser session, preferring the default account —
+ * separate from `selectGoogleAccount`'s quota-based rotation (browser sessions aren't a Gemini-API
+ * quota concern). Returns null if the user hasn't connected any account's Flow session yet, which
+ * callers treat as "automation unavailable, use the manual hand-off."
+ */
+export async function findAccountWithFlowSession(userId: string): Promise<{ accountId: string } | null> {
+  await connectToDatabase();
+  const account = await GoogleAccount.findOne({ userId, status: "active", flowSessionConnectedAt: { $exists: true } })
+    .sort({ isDefault: -1, flowSessionConnectedAt: -1 })
+    .select("_id")
+    .lean();
+  return account ? { accountId: account._id.toString() } : null;
 }
 
 /**

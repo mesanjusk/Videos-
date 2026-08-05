@@ -12,7 +12,13 @@ const googleAccountSchema = new Schema(
     avatarUrl: { type: String },
     credentials: {
       apiKeyEnc: { type: String, required: true }, // AES-256-GCM ciphertext, see core/auth/encryption.ts
+      // Playwright `storageState()` JSON (cookies + localStorage) from a browser session where this
+      // account manually logged into Google once — AES-256-GCM ciphertext, same as apiKeyEnc.
+      // Optional: the Browser Automation Engine (core/automation) only works for accounts that have
+      // one. We never automate the Google login itself — see docs/MOVIE-STUDIO-ROADMAP.md Module 4.
+      flowSessionStateEnc: { type: String },
     },
+    flowSessionConnectedAt: { type: Date },
     status: {
       type: String,
       enum: ["active", "disabled", "quota_exceeded", "error"],

@@ -369,3 +369,56 @@ have): wiring a real paid API for video (Runway/Kling), lip sync (Hedra/HeyGen),
 `core/ai/registry.ts` once a key exists; and platform upload/export (YouTube Data API is the only
 one of the three PDF platforms with a free, non-gated upload API, but needs a verified OAuth consent
 screen configured outside this codebase before it can be wired in).
+
+## 13. Browser Automation Engine (2026-08 addition)
+
+An optional, opt-in second path for the Google Flow video step (§2): Playwright drives Flow's actual
+web UI end to end (open project, upload references, paste prompt, generate, download) instead of a
+human running those same steps by hand. The manual hand-off from §2 is unchanged and stays the
+default — automation is strictly additive.
+
+**Why this is a separate job type/queue, not a `VideoProvider` swap in the shared registry.**
+`core/ai/registry.ts` is imported by every route and by the shared `processorRegistry`
+(`core/queue/processors/index.ts`), which both the Vercel-serverless tick (`/api/queue/tick`) and the
+standalone `worker.ts` consume. A Playwright-based provider registered there would get bundled into
+Vercel serverless functions — no guaranteed Chromium binary, unsuited execution time limits for a
+multi-minute browser session, unnecessary bundle weight. So automation lives entirely outside that
+import graph:
+
+- `core/automation/` (Playwright session management, the Flow driver, centralized selectors) and
+  `core/ai/providers/google/google-flow-automated.ts` (the automation-backed generator) are never
+  imported by `core/ai/registry.ts`.
+- A distinct job type, `scene_video_auto`, has its own processor
+  (`core/queue/processors/scene-video-auto.processor.ts`) registered only in
+  `core/queue/worker-only-processors.ts` — a registry **only `worker.ts` imports**, never
+  `core/queue/worker-runtime.ts` (which backs the Vercel tick route). Confirmed via `next build`:
+  none of `core/automation/*` appears in any route's server bundle or build trace.
+- If `worker.ts` isn't running when a `scene_video_auto` job is enqueued, it just sits `queued` —
+  visible on `/queue` (§ Scene Queue) — until a worker picks it up. An honest degrade, not a silent
+  failure, and consistent with how `render` jobs already lean on `worker.ts` for the same
+  serverless-time-limit reason (§7).
+
+**Why the Google login itself is never automated.** Typing real Google credentials into Google's own
+login form via a headless browser is exactly the pattern Google's abuse detection exists to catch,
+and it would make this codebase responsible for handling 2FA, consent screens, and account lockouts
+it has no business touching. Instead, `GoogleAccount.credentials.flowSessionStateEnc` stores a
+Playwright `storageState()` export (cookies + localStorage) from a session where the operator logged
+in manually, exactly once, outside the app (`npx playwright codegen labs.google/flow`) — encrypted
+at rest the same way as the Gemini API key (`core/auth/encryption.ts`), decrypted only inside
+worker-only code. The Accounts page's "Connect Flow browser session" flow is just pasting that JSON
+in; `modules/accounts/service.ts#findAccountWithFlowSession` finds an account with one connected.
+
+**The circuit breaker.** `AutomationCircuitBreakerError` (`core/automation/errors.ts`) is thrown for
+anything automation should never push through blindly: the session looks logged out, an expected
+selector isn't there (Flow's DOM changed, or a verification/CAPTCHA challenge appeared), or a step
+ran past its bounded timeout. `google-flow-automated.ts` catches exactly this error type and returns
+the identical `manual_pending` shape the plain manual provider returns — the Scene state machine and
+hand-off upload UI never know or care which path produced it. Only a genuinely unexpected error (the
+browser itself failing to launch, say) is allowed to fail the job outright.
+
+**Honest caveat on selectors.** `core/automation/selectors.ts` centralizes every CSS/text selector
+the driver depends on — but labs.google/flow has no public API and no documented DOM contract, and
+this codebase has no real Google account or network path to it to verify against. The selectors
+shipped are best-effort placeholders, clearly marked as needing calibration by an operator with real
+Flow access before production use. The driver's control flow (`google-flow-driver.ts`) doesn't need
+to change when they're corrected — only that one file does.
