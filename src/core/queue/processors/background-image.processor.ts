@@ -10,6 +10,8 @@ import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
+import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { QualityCheckFailedError } from "@/core/quality/errors";
 
 /** PDF Step 3 — Create Backgrounds. */
 export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
@@ -50,6 +52,9 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
       folder: `projects/${jobDoc.projectId}/backgrounds`,
       publicId: background._id.toString(),
     });
+    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
+
     const asset = await Asset.create({
       userId: jobDoc.userId,
       projectId: jobDoc.projectId,

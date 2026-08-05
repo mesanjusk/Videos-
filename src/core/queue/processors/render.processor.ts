@@ -7,6 +7,7 @@ import { Asset } from "@/modules/assets/models/Asset";
 import { composeVideo } from "@/core/ffmpeg/compose";
 import { uploadVideoAsset } from "@/core/storage/cloudinary";
 import { onRenderCompleted } from "@/core/queue/orchestrator";
+import { checkImageResolution, TARGET_FINAL_VIDEO } from "@/core/quality/checks";
 
 /** PDF Step 9 — Editing. Joins every scene with a generated video clip into the final export. */
 export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -81,7 +82,14 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
 
       await onRenderCompleted(jobDoc.userId, jobDoc.projectId.toString());
 
-      return { assetId: asset._id.toString(), durationSeconds: compose.durationSeconds };
+      // Warning-only: compose.ts's own ffmpeg filter graph deterministically forces this
+      // resolution, so a mismatch here would mean a pipeline bug, not a re-runnable generation
+      // issue — surfaced for visibility, never auto-retried (re-rendering is the most expensive
+      // job type in the app).
+      const qualityIssues = checkImageResolution(uploaded, TARGET_FINAL_VIDEO).map((i) => ({ ...i, severity: "warning" as const }));
+      if (qualityIssues.length > 0) console.error(`[quality] final render for project ${jobDoc.projectId}:`, qualityIssues);
+
+      return { assetId: asset._id.toString(), durationSeconds: compose.durationSeconds, qualityIssues };
     } finally {
       await compose.cleanup();
     }

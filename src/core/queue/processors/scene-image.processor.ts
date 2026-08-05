@@ -12,6 +12,8 @@ import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { advanceScene } from "@/core/queue/orchestrator";
+import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { QualityCheckFailedError } from "@/core/quality/errors";
 
 /** PDF Step 4 — Scene Prompt Formula: character reference + background + action + camera + emotion + lighting + style. */
 export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -67,6 +69,9 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
       folder: `projects/${jobDoc.projectId}/scenes/${scene._id.toString()}`,
       publicId: "image",
     });
+    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
+
     const asset = await Asset.create({
       userId: jobDoc.userId,
       projectId: jobDoc.projectId,

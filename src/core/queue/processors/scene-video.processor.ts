@@ -11,6 +11,8 @@ import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { advanceScene } from "@/core/queue/orchestrator";
 import type { VideoGenerationResult } from "@/core/ai/types";
+import { checkVideoDuration, SCENE_VIDEO_DURATION } from "@/core/quality/checks";
+import { QualityCheckFailedError } from "@/core/quality/errors";
 
 /**
  * Uploads a completed video result to Cloudinary, records it as an Asset, and flips the Scene to
@@ -29,6 +31,14 @@ export async function completeSceneVideo(
     folder: `projects/${projectId}/scenes/${scene._id.toString()}`,
     publicId: "video",
   });
+  const actualDuration = result.durationSeconds ?? uploaded.durationSeconds;
+  const durationIssues = checkVideoDuration(actualDuration, SCENE_VIDEO_DURATION.min, SCENE_VIDEO_DURATION.max);
+  if (durationIssues.length > 0) {
+    // Escalated to "error" in this context only — this path is genuinely AI-generated (never a
+    // human upload, see the docstring above), so an out-of-spec duration is worth retrying.
+    throw new QualityCheckFailedError(durationIssues.map((i) => ({ ...i, severity: "error" })));
+  }
+
   const asset = await Asset.create({
     userId,
     projectId,

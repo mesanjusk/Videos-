@@ -9,6 +9,8 @@ import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { QualityCheckFailedError } from "@/core/quality/errors";
 
 /** PDF Step 10 — Thumbnail. */
 export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -55,6 +57,9 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
       folder: `projects/${jobDoc.projectId}`,
       publicId: "thumbnail",
     });
+    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
+
     const asset = await Asset.create({
       userId: jobDoc.userId,
       projectId: jobDoc.projectId,

@@ -187,4 +187,27 @@ before Module 2 starts, per the requested workflow.
       network path to labs.google/flow to calibrate against. They need correcting by an operator
       with real Flow access before this is relied on in production; the driver's control flow
       doesn't change when they are.
-- [ ] Module 5 — Quality Verification + Auto Retry. Pending confirmation on Module 4.
+- [x] **Module 5 — Quality Verification + Auto Retry.** Deterministic checks
+      (`core/quality/checks.ts`) replace guesswork: `checkImageResolution` compares Cloudinary's
+      *measured* width/height (not the Gemini provider's self-reported, currently-hardcoded
+      1080×1350 claim in `gemini-image.ts` — checking a claim against itself would be meaningless)
+      against the 4:5/1080×1920 targets `ARCHITECTURE.md` already declares; `checkVideoDuration`
+      against the PDF's 5-8s clamp; `checkSceneCompleteness` flags a scene whose status implies an
+      asset it doesn't have.
+      **Auto Retry is a refactor, not a new system**: `QualityCheckFailedError` is thrown from
+      inside the same processor `run()` callback every other error already flows through
+      (`withJobLifecycle`), so it gets BullMQ's existing attempts/backoff and Module 3's
+      "retrying" status for free — retries are now triggered by *validated bad output*
+      (character sheet/background/scene-image/thumbnail resolution; the browser-automation video
+      path's duration), not just "something threw." Human-uploaded manual hand-offs are
+      deliberately never auto-retried on a quality check — that would discard someone's deliberate
+      upload; those become UI warnings instead.
+      **Character consistency** uses a difference-hash (dHash, via the previously-unused `sharp`
+      dependency the prior audit flagged as aspirational-only — now genuinely wired up) comparing a
+      character's generated poses to its own front-view, all from the same generation batch — a
+      structural heuristic, explicitly not a claim of real ML/vision-model similarity scoring,
+      never a retry trigger (only ever a warning), documented as such in
+      `core/quality/perceptual-hash.ts`.
+      Warnings surface where a producer is already looking: a new `QualityWarnings` component on
+      the Character Library/project Characters page (pose-consistency warnings) and Scene Manager
+      (video duration warnings), plus a client-side `checkSceneCompleteness` badge per scene card.
