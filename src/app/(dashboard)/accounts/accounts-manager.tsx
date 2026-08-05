@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExternalLink, Loader2, MoreVertical, Plus, ShieldCheck, UserRound } from "lucide-react";
-import { addGoogleAccountSchema, type AddGoogleAccountFormInput } from "@/modules/accounts/schema";
+import { Bot, ExternalLink, Loader2, MoreVertical, Plus, ShieldCheck, UserRound } from "lucide-react";
+import { addGoogleAccountSchema, saveFlowSessionSchema, type AddGoogleAccountFormInput, type SaveFlowSessionInput } from "@/modules/accounts/schema";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/shared/empty-state";
 
 export interface AccountListItem {
@@ -34,6 +35,7 @@ export interface AccountListItem {
   quotaUsed: number;
   quotaLimit: number;
   lastUsedAt: string | null;
+  flowSessionConnected: boolean;
 }
 
 const STATUS_BADGE: Record<AccountListItem["status"], { label: string; variant: "success" | "secondary" | "warning" | "destructive" }> = {
@@ -68,6 +70,7 @@ function QuotaLine({ account }: { account: AccountListItem }) {
 export function AccountsManager({ initialAccounts }: { initialAccounts: AccountListItem[] }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [flowSessionAccountId, setFlowSessionAccountId] = useState<string | null>(null);
 
   async function performAction(id: string, action: "enable" | "disable" | "set-default") {
     await fetch(`/api/accounts/${id}`, {
@@ -82,6 +85,13 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
     await fetch(`/api/accounts/${id}`, { method: "DELETE" });
     router.refresh();
   }
+
+  async function disconnectFlowSession(id: string) {
+    await fetch(`/api/accounts/${id}/flow-session`, { method: "DELETE" });
+    router.refresh();
+  }
+
+  const flowSessionAccount = initialAccounts.find((a) => a.id === flowSessionAccountId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -140,6 +150,12 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
                     <p className="truncate text-xs text-muted-foreground">{account.email}</p>
                     <QuotaLine account={account} />
                   </div>
+                  {account.flowSessionConnected && (
+                    <Badge variant="outline">
+                      <Bot className="h-3 w-3" />
+                      Flow connected
+                    </Badge>
+                  )}
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -160,6 +176,15 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
                       ) : (
                         <DropdownMenuItem onSelect={() => performAction(account.id, "disable")}>Disable</DropdownMenuItem>
                       )}
+                      {account.flowSessionConnected ? (
+                        <DropdownMenuItem onSelect={() => disconnectFlowSession(account.id)}>
+                          Disconnect Flow browser session
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onSelect={() => setFlowSessionAccountId(account.id)}>
+                          Connect Flow browser session (beta)
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem className="text-destructive" onSelect={() => removeAccount(account.id)}>
                         Remove
                       </DropdownMenuItem>
@@ -171,7 +196,93 @@ export function AccountsManager({ initialAccounts }: { initialAccounts: AccountL
           })}
         </div>
       )}
+
+      <Dialog open={!!flowSessionAccount} onOpenChange={(open) => !open && setFlowSessionAccountId(null)}>
+        <DialogContent>
+          {flowSessionAccount && (
+            <ConnectFlowSessionForm
+              accountId={flowSessionAccount.id}
+              accountName={flowSessionAccount.displayName}
+              onSuccess={() => {
+                setFlowSessionAccountId(null);
+                router.refresh();
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function ConnectFlowSessionForm({
+  accountId,
+  accountName,
+  onSuccess,
+}: {
+  accountId: string;
+  accountName: string;
+  onSuccess: () => void;
+}) {
+  const [serverError, setServerError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SaveFlowSessionInput>({ resolver: zodResolver(saveFlowSessionSchema) });
+
+  async function onSubmit(values: SaveFlowSessionInput) {
+    setServerError(null);
+    const res = await fetch(`/api/accounts/${accountId}/flow-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setServerError(body.error ?? "Failed to save the Flow session");
+      return;
+    }
+    onSuccess();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <DialogHeader>
+        <DialogTitle>Connect {accountName}&rsquo;s Flow browser session</DialogTitle>
+        <DialogDescription>
+          Unlocks the Scene Manager&rsquo;s experimental &ldquo;browser automation&rdquo; video generation for this
+          account. We never automate the Google login itself — that stays a one-time manual step:
+        </DialogDescription>
+      </DialogHeader>
+      <div className="mt-4 space-y-4">
+        <ol className="list-inside list-decimal space-y-1.5 text-sm text-muted-foreground">
+          <li>
+            On a machine with Node + Playwright, run{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">npx playwright codegen labs.google/flow</code> and log
+            into this Google account when the browser opens.
+          </li>
+          <li>
+            In the codegen window&rsquo;s console (or a small script), run{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">await context.storageState()</code> and copy the
+            resulting JSON.
+          </li>
+          <li>Paste that JSON below. It&rsquo;s encrypted at rest the same way your API key is, never sent back to the browser.</li>
+        </ol>
+        <div className="space-y-2">
+          <Label htmlFor="storageState">storageState() JSON</Label>
+          <Textarea id="storageState" rows={6} placeholder='{"cookies": [...], "origins": [...]}' {...register("storageState")} />
+          {errors.storageState && <p className="text-xs text-destructive">{errors.storageState.message}</p>}
+        </div>
+        {serverError && <p className="text-sm text-destructive">{serverError}</p>}
+      </div>
+      <DialogFooter>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          Connect session
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 

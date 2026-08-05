@@ -7,6 +7,7 @@ import { Reorder, useDragControls } from "framer-motion";
 import {
   AlertTriangle,
   AudioLines,
+  Bot,
   Camera,
   Check,
   Copy,
@@ -82,11 +83,13 @@ export function ScenesManager({
   initialScenes,
   characterOptions,
   backgroundOptions,
+  hasFlowSession,
 }: {
   projectId: string;
   initialScenes: SceneListItem[];
   characterOptions: CharacterOption[];
   backgroundOptions: BackgroundOption[];
+  hasFlowSession: boolean;
 }) {
   const [scenes, setScenes] = useState(initialScenes);
   const [reorderError, setReorderError] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export function ScenesManager({
             position={position + 1}
             characterOptions={characterOptions}
             backgroundOptions={backgroundOptions}
+            hasFlowSession={hasFlowSession}
           />
         ))}
       </Reorder.Group>
@@ -129,11 +133,13 @@ function SceneCard({
   position,
   characterOptions,
   backgroundOptions,
+  hasFlowSession,
 }: {
   scene: SceneListItem;
   position: number;
   characterOptions: CharacterOption[];
   backgroundOptions: BackgroundOption[];
+  hasFlowSession: boolean;
 }) {
   const router = useRouter();
   const dragControls = useDragControls();
@@ -145,6 +151,7 @@ function SceneCard({
   const [voiceJobId, setVoiceJobId] = useState<string | null>(null);
   const [lipSyncJobId, setLipSyncJobId] = useState<string | null>(null);
   const [lipSyncError, setLipSyncError] = useState<string | null>(null);
+  const [autoVideoError, setAutoVideoError] = useState<string | null>(null);
   const imagePoll = useJobPolling(imageJobId);
   const videoPoll = useJobPolling(videoJobId);
   const voicePoll = useJobPolling(voiceJobId);
@@ -179,6 +186,18 @@ function SceneCard({
     if (res.ok) {
       const { job } = await res.json();
       setVideoJobId(job._id);
+    }
+  }
+
+  async function generateVideoAutomated() {
+    setAutoVideoError(null);
+    const res = await fetch(`/api/scenes/${scene.id}/video/auto`, { method: "POST" });
+    if (res.ok) {
+      const { job } = await res.json();
+      setVideoJobId(job._id);
+    } else {
+      const body = await res.json().catch(() => null);
+      setAutoVideoError(body?.error ?? "Couldn't start automated video generation");
     }
   }
 
@@ -436,10 +455,29 @@ function SceneCard({
               </div>
             )}
             {!showVideoHandoff && (
-              <Button size="sm" variant="outline" className="w-full" onClick={generateVideo} disabled={!!(videoJobId && !videoPoll.isDone)}>
-                {videoJobId && !videoPoll.isDone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-                {scene.videoUrl ? "Regenerate video" : "Generate video"}
-              </Button>
+              <div className="space-y-1.5">
+                <Button size="sm" variant="outline" className="w-full" onClick={generateVideo} disabled={!!(videoJobId && !videoPoll.isDone)}>
+                  {videoJobId && !videoPoll.isDone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+                  {scene.videoUrl ? "Regenerate video" : "Generate video"}
+                </Button>
+                {hasFlowSession ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={generateVideoAutomated}
+                    disabled={!!(videoJobId && !videoPoll.isDone)}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Try browser automation (beta)
+                  </Button>
+                ) : (
+                  <p className="text-center text-xs text-muted-foreground">
+                    Connect a Flow browser session on the Accounts page to try automated generation.
+                  </p>
+                )}
+                {autoVideoError && <p className="text-xs text-destructive">{autoVideoError}</p>}
+              </div>
             )}
           </div>
         </div>

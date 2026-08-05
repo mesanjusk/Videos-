@@ -4,6 +4,7 @@ import { getProject } from "@/modules/projects/service";
 import { listScenes } from "@/modules/scenes/service";
 import { listCharacters } from "@/modules/characters/service";
 import { listBackgrounds } from "@/modules/backgrounds/service";
+import { findAccountWithFlowSession } from "@/modules/accounts/service";
 import { HelpButton } from "@/components/shared/help-button";
 import { ScenesManager, type SceneListItem } from "./scenes-manager";
 
@@ -13,10 +14,11 @@ export default async function ScenesPage({ params }: { params: Promise<{ project
   const project = await getProject(userId, projectId);
   if (!project) notFound();
 
-  const [scenes, characters, backgrounds] = await Promise.all([
+  const [scenes, characters, backgrounds, flowAccount] = await Promise.all([
     listScenes(userId, projectId),
     listCharacters(userId, projectId),
     listBackgrounds(userId, projectId),
+    findAccountWithFlowSession(userId),
   ]);
 
   const sceneItems: SceneListItem[] = scenes.map((s) => ({
@@ -65,6 +67,7 @@ export default async function ScenesPage({ params }: { params: Promise<{ project
         initialScenes={sceneItems}
         characterOptions={characterOptions}
         backgroundOptions={backgroundOptions}
+        hasFlowSession={!!flowAccount}
       />
     </div>
   );

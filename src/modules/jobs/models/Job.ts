@@ -6,6 +6,11 @@ export const JOB_TYPES = [
   "background_image",
   "scene_image",
   "scene_video",
+  // Browser-automation-backed video generation (Module 4) — a distinct job type/queue from
+  // scene_video specifically so its processor (which imports Playwright) can be registered only in
+  // worker.ts's worker-only registry, never the shared one the Vercel serverless tick route uses.
+  // See core/queue/worker-only-processors.ts.
+  "scene_video_auto",
   "voice",
   "lipsync",
   "render",

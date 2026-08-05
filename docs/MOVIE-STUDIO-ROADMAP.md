@@ -167,5 +167,24 @@ before Module 2 starts, per the requested workflow.
       the owning project — the cross-project view the per-project-only `Job` persistence never had a
       UI for. `JobBadge`, `countJobsByStatus`, and the dashboard's active-jobs count all updated for
       the new status so nothing undercounts a job that's mid-backoff.
-- [ ] Module 4 — Browser Automation Engine. Pending confirmation on Module 3.
-- [ ] Module 5 — Quality Verification + Auto Retry.
+- [x] **Module 4 — Browser Automation Engine.** Playwright-driven Google Flow automation as an
+      opt-in second path alongside the existing manual hand-off (unchanged, still the default). The
+      one architectural decision this module exists to enforce: `core/automation/*` and
+      `core/ai/providers/google/google-flow-automated.ts` are never imported by `core/ai/registry.ts`
+      — a new job type (`scene_video_auto`) and processor
+      (`scene-video-auto.processor.ts`) are registered only in `core/queue/worker-only-processors.ts`,
+      which only `worker.ts` imports, never the shared registry the Vercel serverless tick uses.
+      Verified via `next build` that no route bundle or trace references Playwright. Google login is
+      never automated — `GoogleAccount.credentials.flowSessionStateEnc` stores an encrypted
+      Playwright `storageState()` export from a one-time manual login, connected from the Accounts
+      page. `AutomationCircuitBreakerError` (session expired / selector not found / verification
+      challenge / timeout) makes every automation attempt fall back to the exact same
+      `manual_pending` hand-off shape the existing manual provider returns, so the Scene Manager and
+      upload UI never have to know which path produced it. See ARCHITECTURE.md §13 for the full
+      design writeup, and docs/deployment.md §6 for setup.
+      **Known limitation, called out explicitly:** `core/automation/selectors.ts`'s selectors are
+      unverified against the live Flow product — this environment has no real Google account or
+      network path to labs.google/flow to calibrate against. They need correcting by an operator
+      with real Flow access before this is relied on in production; the driver's control flow
+      doesn't change when they are.
+- [ ] Module 5 — Quality Verification + Auto Retry. Pending confirmation on Module 4.

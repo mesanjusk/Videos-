@@ -3,9 +3,14 @@
  * tick (`/api/queue/tick`, see ARCHITECTURE.md §7) for anyone self-hosting or running a small
  * always-on process (Railway, Fly.io, a VPS, ...) alongside the Vercel-hosted Next.js app.
  *
- * Same `processorRegistry` either way — these processors don't know or care which runtime invoked
- * them. Useful in particular for `render` jobs, which can outrun a serverless function's time limit
- * on longer videos; a persistent process has no such ceiling.
+ * `processorRegistry` is shared with the Vercel tick route — those processors don't know or care
+ * which runtime invoked them. `workerOnlyProcessorRegistry` (Module 4's browser automation) is
+ * registered ONLY here, never by the Vercel route — it imports Playwright, which has no business
+ * in a serverless function. Useful in particular for `render` jobs too, which can outrun a
+ * serverless function's time limit on longer videos; a persistent process has no such ceiling.
+ *
+ * Browser automation additionally needs Chromium installed on this host specifically (Vercel's
+ * build never needs it): run `npx playwright install --with-deps chromium` once during setup.
  *
  * Run with `npm run worker`. Needs the same env vars as the Next.js app (MONGODB_URI, REDIS_URL,
  * CLOUDINARY_*, GEMINI_API_KEY or a connected Google account, ...).
@@ -14,13 +19,14 @@ import "dotenv/config";
 import { Worker } from "bullmq";
 import { getRedisConnection } from "./src/core/queue/connection";
 import { processorRegistry } from "./src/core/queue/processors";
+import { workerOnlyProcessorRegistry } from "./src/core/queue/worker-only-processors";
 import { connectToDatabase } from "./src/core/db/mongoose";
 
 async function main() {
   await connectToDatabase();
   const connection = getRedisConnection();
 
-  const workers = Object.entries(processorRegistry).map(
+  const workers = Object.entries({ ...processorRegistry, ...workerOnlyProcessorRegistry }).map(
     ([type, processor]) => new Worker(type, processor, { connection, concurrency: 2 }),
   );
 
