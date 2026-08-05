@@ -56,3 +56,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Landing page only — additive utilities, none of this touches existing dashboard styling. */
+@layer utilities {
+  .glass-panel {
+    @apply border border-white/10 bg-white/5 backdrop-blur-xl;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe-only {
+    animation: none !important;
+    transition: none !important;
+  }
+}
