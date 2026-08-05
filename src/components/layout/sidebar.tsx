@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Bot,
   Clapperboard,
   LayoutDashboard,
   FolderKanban,
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/style-packs", label: "Style Packs", icon: Palette },
   { href: "/voice-packs", label: "Voice Packs", icon: Mic2 },
   { href: "/queue", label: "Queue", icon: ListChecks },
+  { href: "/browser-automation", label: "Browser Automation", icon: Bot },
   { href: "/accounts", label: "Google Accounts", icon: UserRound },
   { href: "/prompts", label: "Prompt Library", icon: SlidersHorizontal },
   { href: "/settings", label: "Settings", icon: Settings },
