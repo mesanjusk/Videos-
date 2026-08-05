@@ -1,30 +1,29 @@
 import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/core/auth/session";
-import { cloneCharacterSchema } from "@/modules/characters/schema";
-import { cloneCharacterIntoProject } from "@/modules/characters/service";
+import { assignCharacterSchema } from "@/modules/characters/schema";
+import { assignCharacterToProject } from "@/modules/characters/service";
 import { getProject } from "@/modules/projects/service";
 
 export const dynamic = "force-dynamic";
 
-/** Copies a character (face/outfit/voice/style/prompt, already-generated sheet images) into another
- * project the user owns — the "character memory" reuse flow, e.g. episode 2 of a series. */
+/** Links a library character into another project the user owns — the "character memory" reuse
+ * flow, e.g. episode 2 of a series. No document is copied: the same character (face/outfit/voice/
+ * style/prompt/version history) becomes usable in the target project's Scene Manager, so an edit
+ * later applies everywhere it's used. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const userId = await requireUserId();
     const { id: characterId } = await params;
 
     const body = await request.json();
-    const parsed = cloneCharacterSchema.safeParse(body);
+    const parsed = assignCharacterSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Invalid input", issues: parsed.error.flatten() }, { status: 400 });
 
     const targetProject = await getProject(userId, parsed.data.targetProjectId);
     if (!targetProject) return NextResponse.json({ error: "Target project not found" }, { status: 404 });
 
-    const result = await cloneCharacterIntoProject(userId, characterId, parsed.data.targetProjectId);
-    if (!result.ok) {
-      if (result.error === "not_found") return NextResponse.json({ error: "Character not found" }, { status: 404 });
-      return NextResponse.json({ error: "That project already has a character with this name" }, { status: 409 });
-    }
+    const result = await assignCharacterToProject(userId, characterId, parsed.data.targetProjectId);
+    if (!result.ok) return NextResponse.json({ error: "Character not found" }, { status: 404 });
 
     return NextResponse.json({ character: result.character }, { status: 201 });
   } catch (err) {

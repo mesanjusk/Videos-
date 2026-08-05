@@ -12,7 +12,9 @@ import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
 
-const DEFAULT_POSES: CharacterPose[] = ["front-view", "happy", "walking-pose"];
+// The Character Library's "Expressions" set — front view plus the emotions/poses a producer
+// needs across scenes, so a new character is reuse-ready without a second generation pass.
+const DEFAULT_POSES: CharacterPose[] = ["front-view", "happy", "sad", "angry", "walking-pose", "running-pose"];
 
 /** PDF Step 2 — Create Characters (character turnaround sheet), a subset of poses per generation. */
 export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {

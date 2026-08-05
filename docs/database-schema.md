@@ -59,16 +59,29 @@ One document per user.
 
 ## Character (`modules/characters/models/Character.ts`)
 
+The permanent Character Library (2026-08 addition) — a character is owned by the user, not locked to
+one project. `projectId` is now the character's optional "home" project (where it was first created
+or first assigned); `usedInProjectIds` tracks every other project it's been reused in. Reuse links the
+same document into a second project (`modules/characters/service.ts#assignCharacterToProject`) instead
+of copying it, so an edit in the Character Library applies everywhere the character is used — no
+duplication, no drift.
+
 | Field | Type |
 |---|---|
-| `projectId`, `userId` | |
+| `projectId` | ObjectId → Project, optional — the home project; unset for a library-only character not yet assigned anywhere |
+| `usedInProjectIds[]` | ObjectId → Project — every additional project this character has been reused in |
+| `userId` | String — owner |
 | `name`, `role` | String |
 | `spec.{age,bodyType,face,eyes,hair,clothes,shoes,accessories,personality}` | the PDF's character-sheet attributes |
-| `sheetAssets[]` | `{ pose: CharacterPose, assetId: ObjectId → Asset }` |
+| `masterPrompt` | String — the canonical, hand-editable description fed into every prompt template referencing this character, independent of the structured `spec` fields |
+| `animationStyle` | String — Pixar/Disney/Anime/Realistic/3D/Custom, overrides the project's style for this character specifically |
+| `colorPalette[]` | String — hex codes |
+| `sheetAssets[]` | `{ pose: CharacterPose, assetId: ObjectId → Asset }` — poses include front/side/back/45°-view plus expressions (happy/sad/angry/laughing) and walking-pose/running-pose |
 | `voiceProfile.{gender,age,tone}` | used by the voice processor for this character's dialogue |
-| `promptTemplateId`, `version`, `previousVersions[]` | reserved; not actively used yet |
+| `promptTemplateId` | reserved; not actively used yet |
+| `version`, `previousVersions[]` | version history — editing `spec`/`masterPrompt`/`animationStyle`/`colorPalette`/`voiceProfile` snapshots the pre-edit state here and bumps `version` (`modules/characters/service.ts#updateCharacter`) |
 
-Unique on `{projectId, name}`.
+Indexed on `{userId, name}` (not unique — the same name can exist across a user's library without conflict; a character's identity is its `_id`, not its name).
 
 ## Background (`modules/backgrounds/models/Background.ts`)
 

@@ -125,3 +125,26 @@ these guardrails before any automation code ships.
 
 Each module ships as its own reviewable commit, and work pauses for confirmation after Module 1
 before Module 2 starts, per the requested workflow.
+
+## 5. Status
+
+- [x] **Module 1 — Character Library.** `Character.projectId` is now optional (a "home" project,
+      set on first use); `usedInProjectIds[]` tracks every other project a character is reused in.
+      `assignCharacterToProject` replaces the old clone-and-duplicate flow — the same document
+      becomes usable in another project, not a copy that drifts. Added `masterPrompt`,
+      `animationStyle`, `colorPalette`, and wired up the previously-dead `version`/`previousVersions`
+      fields (`updateCharacter` snapshots before every creative-field edit). New global `/characters`
+      page (Character Library) with create/edit/assign/delete and a "previous videos" lookup across
+      every project the character has appeared in; `/library` narrowed to backgrounds only, which the
+      Character Library now supersedes for characters. Default character-sheet generation expanded
+      from 3 to 6 poses (front-view + happy/sad/angry/walking/running) to match the requested
+      Expressions set out of the box. Fixed two call sites (`thumbnail.processor.ts`,
+      `orchestrator.ts`) that only looked up a project's *own* characters and would otherwise have
+      silently excluded reused ones from thumbnails and full-auto mode.
+      TODO/known boundary: a character with no home project yet can't generate or upload a reference
+      image until it's assigned to at least one project (Job/Asset still require a `projectId` —
+      loosening that is Asset/Job-model work, out of scope here; flagged for a future pass if wanted).
+- [ ] Module 2 — Project Manager. Pending confirmation on Module 1.
+- [ ] Module 3 — Scene Queue.
+- [ ] Module 4 — Browser Automation Engine.
+- [ ] Module 5 — Quality Verification + Auto Retry.

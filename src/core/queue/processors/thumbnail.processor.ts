@@ -16,7 +16,12 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
     const project = await Project.findOne({ _id: jobDoc.projectId, userId: jobDoc.userId });
     if (!project) throw new Error("Project not found");
 
-    const characters = await Character.find({ projectId: jobDoc.projectId, userId: jobDoc.userId }).lean();
+    // Includes characters reused from the library (usedInProjectIds), not just ones created
+    // directly in this project — a reused character must show up everywhere it's assigned.
+    const characters = await Character.find({
+      userId: jobDoc.userId,
+      $or: [{ projectId: jobDoc.projectId }, { usedInProjectIds: jobDoc.projectId }],
+    }).lean();
     const characterReferenceImages = characters
       .map((c) => {
         const front = c.sheetAssets?.find((s) => s.pose === "front-view");

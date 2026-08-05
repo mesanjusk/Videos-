@@ -69,7 +69,13 @@ export async function onCharacterOrBackgroundReady(userId: string, projectId: st
   await connectToDatabase();
 
   const [readyCharacters, readyBackground] = await Promise.all([
-    Character.find({ userId, projectId, "sheetAssets.0": { $exists: true } })
+    // Includes characters reused from the library (usedInProjectIds), not just ones created
+    // directly in this project.
+    Character.find({
+      userId,
+      $or: [{ projectId }, { usedInProjectIds: projectId }],
+      "sheetAssets.0": { $exists: true },
+    })
       .select("_id")
       .lean(),
     Background.findOne({ userId, projectId, assetId: { $exists: true } })

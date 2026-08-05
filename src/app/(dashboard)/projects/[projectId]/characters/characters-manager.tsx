@@ -58,9 +58,9 @@ export function CharactersManager({ projectId, initialCharacters }: { projectId:
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
         <Button variant="outline" asChild>
-          <Link href={`/library?target=${projectId}`}>
+          <Link href={`/characters?target=${projectId}`}>
             <LibraryBig className="h-4 w-4" />
-            Reuse from another project
+            Reuse from the character library
           </Link>
         </Button>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

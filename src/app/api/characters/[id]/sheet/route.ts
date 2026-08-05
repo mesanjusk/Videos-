@@ -15,6 +15,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { id: characterId } = await params;
     const character = await getCharacter(userId, characterId);
     if (!character) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    // AI sheet generation needs a project (for style + Cloudinary folder) — a library-only
+    // character with no home project yet must be assigned to one first, or use "upload my own image".
+    if (!character.projectId) {
+      return NextResponse.json(
+        { error: "Assign this character to a project before generating an AI sheet" },
+        { status: 400 },
+      );
+    }
 
     const job = await enqueueJob({
       userId,
