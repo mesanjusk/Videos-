@@ -11,8 +11,9 @@ import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { advanceScene } from "@/core/queue/orchestrator";
 import type { VideoGenerationResult } from "@/core/ai/types";
-import { checkVideoDuration, SCENE_VIDEO_DURATION } from "@/core/quality/checks";
+import { checkVideoDuration } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
+import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 
 /**
  * Uploads a completed video result to Cloudinary, records it as an Asset, and flips the Scene to
@@ -26,13 +27,15 @@ export async function completeSceneVideo(
   userId: string,
   projectId: string,
   result: Extract<VideoGenerationResult, { status: "completed" }>,
+  activeProfileId?: unknown,
 ) {
   const uploaded = await uploadVideoAsset(result.data, {
     folder: `projects/${projectId}/scenes/${scene._id.toString()}`,
     publicId: "video",
   });
   const actualDuration = result.durationSeconds ?? uploaded.durationSeconds;
-  const durationIssues = checkVideoDuration(actualDuration, SCENE_VIDEO_DURATION.min, SCENE_VIDEO_DURATION.max);
+  const qualityTargets = await resolveQualityTargets(activeProfileId, userId);
+  const durationIssues = checkVideoDuration(actualDuration, qualityTargets.sceneVideoDuration.min, qualityTargets.sceneVideoDuration.max);
   if (durationIssues.length > 0) {
     // Escalated to "error" in this context only — this path is genuinely AI-generated (never a
     // human upload, see the docstring above), so an out-of-spec duration is worth retrying.
@@ -105,7 +108,8 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
     const providerId = await getProviderOverride(jobDoc.userId, "video");
     const provider = getVideoProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_video");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_video", promptTemplateOverrides?.scene_video);
 
     const result = await provider.generateVideo({
       sceneId: scene._id.toString(),
@@ -130,6 +134,6 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
       };
     }
 
-    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result);
+    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result, project.activeProfileId);
   });
 }

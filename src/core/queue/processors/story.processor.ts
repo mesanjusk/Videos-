@@ -24,14 +24,15 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     // reasonable follow-up but isn't implemented yet.
     const premise = project.storyInputMode === "script" ? (project.pastedScript ?? "") : (project.premise ?? "");
 
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "story");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "story", promptTemplateOverrides?.story);
     const providerId = await getProviderOverride(jobDoc.userId, "story");
     const provider = getStoryProvider(providerId);
     const story = await provider.generateStory(
       {
         premise,
         language: project.language,
-        sceneCount: 8,
+        sceneCount: project.sceneCount ?? 8,
         characterCount: 2,
         targetDurationSeconds: project.durationSeconds,
         templateOverride,

@@ -11,15 +11,11 @@ import type { CharacterPose } from "@/core/ai/types";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
-import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
 import { computeDHash, dHashSimilarity } from "@/core/quality/perceptual-hash";
 import type { QualityIssue } from "@/core/quality/types";
-
-/** Below this dHash similarity to the front-view pose, a pose is flagged as a possible
- * consistency miss — advisory only (some divergence between "front-view" and "running-pose" is
- * normal), never a retry trigger. See core/quality/perceptual-hash.ts for what dHash is and isn't. */
-const CONSISTENCY_WARNING_THRESHOLD = 0.45;
+import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 
 // The Character Library's "Expressions" set — front view plus the emotions/poses a producer
 // needs across scenes, so a new character is reuse-ready without a second generation pass.
@@ -44,7 +40,8 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     const providerId = await getProviderOverride(jobDoc.userId, "image");
     const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "character");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "character", promptTemplateOverrides?.character);
 
     const images = await provider.generateCharacterSheet(
       {
@@ -69,6 +66,8 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     );
     await recordAccountUsage(accountId);
 
+    const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
+
     const sheetAssets = [];
     const poseHashes: Partial<Record<CharacterPose, string>> = {};
     for (const pose of poses) {
@@ -78,7 +77,7 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
         folder: `projects/${jobDoc.projectId}/characters/${character._id.toString()}`,
         publicId: pose,
       });
-      const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+      const resolutionIssues = checkImageResolution(uploaded, qualityTargets.imageTarget);
       if (resolutionIssues.length > 0) {
         throw new QualityCheckFailedError(resolutionIssues.map((i) => ({ ...i, message: `[${pose}] ${i.message}` })));
       }
@@ -104,14 +103,15 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
 
     // Within-batch consistency: every non-front-view pose compared to front-view, all generated in
-    // this same call. Advisory only — see CONSISTENCY_WARNING_THRESHOLD's comment.
+    // this same call. Advisory only — threshold resolved from the project's Production Profile
+    // when one is set (Module 6), else the same 0.45 default this always used.
     const qualityIssues: QualityIssue[] = [];
     const frontHash = poseHashes["front-view"];
     if (frontHash) {
       for (const [pose, hash] of Object.entries(poseHashes) as [CharacterPose, string][]) {
         if (pose === "front-view" || !hash) continue;
         const similarity = dHashSimilarity(frontHash, hash);
-        if (similarity < CONSISTENCY_WARNING_THRESHOLD) {
+        if (similarity < qualityTargets.characterConsistencyThreshold) {
           qualityIssues.push({
             severity: "warning",
             check: "character-consistency",

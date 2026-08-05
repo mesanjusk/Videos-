@@ -43,8 +43,33 @@ export async function getOrSeedTemplate(userId: string, scope: PromptScope) {
   return doc;
 }
 
-/** Called by queue processors right before generation — the DB template if present, else the code default. */
-export async function resolveActiveTemplate(userId: string, scope: PromptScope): Promise<PromptTemplateDefinition> {
+/**
+ * Called by queue processors right before generation — the DB template if present, else the code
+ * default. `overrideTemplateId` (a specific named preset's `_id`) lets a Production Profile
+ * (Module 6) pin a project to a particular preset instead of whatever's currently `isDefault` for
+ * that scope; every existing call site omits it, so behavior is unchanged unless a project sets
+ * `Project.promptTemplateOverrides[scope]`.
+ */
+export async function resolveActiveTemplate(
+  userId: string,
+  scope: PromptScope,
+  overrideTemplateId?: string,
+): Promise<PromptTemplateDefinition> {
+  if (overrideTemplateId) {
+    const override = await PromptTemplate.findOne({ _id: overrideTemplateId, userId, scope }).lean();
+    if (override) {
+      return {
+        scope: override.scope as PromptScope,
+        name: override.name,
+        template: override.template,
+        variables: override.variables ?? [],
+        appendConsistencyFormula: override.appendConsistencyFormula ?? false,
+      };
+    }
+    // Falls through to the active/default template if the override id is stale (e.g. the preset
+    // was deleted) rather than failing generation outright.
+  }
+
   const doc = await getOrSeedTemplate(userId, scope);
   return {
     scope: doc.scope as PromptScope,

@@ -2,14 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, LayoutDashboard, FolderKanban, LibraryBig, ListChecks, Users, UserRound, Settings, SlidersHorizontal } from "lucide-react";
+import {
+  Activity,
+  Clapperboard,
+  LayoutDashboard,
+  FolderKanban,
+  LibraryBig,
+  ListChecks,
+  Mic2,
+  Palette,
+  Users,
+  UserRound,
+  Settings,
+  SlidersHorizontal,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/production-profiles", label: "Production Profiles", icon: Clapperboard },
+  { href: "/production", label: "Pipeline Monitor", icon: Activity },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/characters", label: "Characters", icon: Users },
   { href: "/library", label: "Backgrounds", icon: LibraryBig },
+  { href: "/style-packs", label: "Style Packs", icon: Palette },
+  { href: "/voice-packs", label: "Voice Packs", icon: Mic2 },
   { href: "/queue", label: "Queue", icon: ListChecks },
   { href: "/accounts", label: "Google Accounts", icon: UserRound },
   { href: "/prompts", label: "Prompt Library", icon: SlidersHorizontal },

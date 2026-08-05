@@ -182,3 +182,45 @@ No browser automation is added anywhere in Module 6 — `RenderProfile.providerO
 only, the same shape `Settings.providerOverrides` already is; it plugs into the existing
 provider-agnostic `core/ai/registry.ts`, ready for a future rendering backend without this module
 needing to change.
+
+## 6. Status
+
+All four phases shipped together (the user opted to build 6a–6d as one delivery rather than the
+staged rollout above):
+
+- **6a** — `ProductionProfile`/`StylePack`/`VoicePack` models, services, API routes, and
+  `/production-profiles`/`/style-packs`/`/voice-packs` pages. Every reference field
+  (`characterIds`, `promptTemplateIds`, `stylePackId`, `voicePackId`) points at existing Module
+  1/prompt-templates data — nothing is copied.
+- **6b** — `core/production-engine/generate.ts` is the actual "topic → Generate" entry point: creates
+  a Project from the profile's defaults, assigns its characters via Module 1's
+  `assignCharacterToProject` (links in, never copies), pins prompt presets via
+  `Project.promptTemplateOverrides`, sets `pipelineMode: "full"`, and enqueues the story job —
+  everything after that is the existing orchestrator, untouched. `ProductionRun` records the
+  snapshot (profile version, character versions, provider ids) at generation time.
+- **6c** — `core/production-engine/compute-stage.ts` derives a run's live stage from real
+  Project/Scene/Job state (the same precedent as `lib/workflow-steps.ts#computeStepStatuses`) —
+  `ProductionRun.stage` in the database only ever holds `"planning"` or `"completed"`, written at
+  exactly two points (creation, and a small addition to
+  `core/queue/orchestrator.ts#onRenderCompleted`). The `/production` Pipeline Monitor page reads
+  both.
+- **6d** — `core/production-engine/resolve-quality-targets.ts` resolves Module 5's resolution/
+  duration/consistency-threshold checks from `Project.activeProfileId`'s `quality` config when
+  set, falling back to the exact same hardcoded constants otherwise — wired into all four image
+  processors and the scene-video duration check. `render` config (`maxParallelJobs`,
+  `providerOverrides`, etc.) is stored but deliberately **not yet consumed** anywhere, per the
+  "abstraction layer only, no browser automation" instruction — a future rendering backend can
+  read it without a schema change.
+
+**Bug caught and fixed during implementation**: `production-profiles/schema.ts` initially imported
+`PRODUCTION_PROFILE_STATUSES` from the model file, which imports Mongoose — since a "use client"
+form component imports that schema, this pulled Mongoose into the browser bundle
+(`/production-profiles` briefly built at 327 kB First Load JS vs. ~150-220 kB everywhere else).
+Fixed by extracting the constant into a Mongoose-free `constants.ts`, the exact pattern
+`modules/projects/constants.ts` already documents for this reason. Confirmed via `next build`:
+`/production-profiles` is back to 185 kB, in line with the rest of the app.
+
+**Known, explicitly out-of-scope limitation**: `voice.processor.ts` doesn't currently load
+`Project`, so the `voice` prompt-template override isn't wired there (every other scope is) — a
+profile's voice-scope preset falls back to the account's currently-active preset instead. Flagged
+here rather than expanding that processor's structure for this pass.

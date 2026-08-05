@@ -10,8 +10,9 @@ import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
-import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
+import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 
 /** PDF Step 3 — Create Backgrounds. */
 export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
@@ -33,7 +34,8 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
     const providerId = await getProviderOverride(jobDoc.userId, "image");
     const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "background");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "background", promptTemplateOverrides?.background);
 
     const image = await provider.generateBackground(
       {
@@ -52,7 +54,8 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
       folder: `projects/${jobDoc.projectId}/backgrounds`,
       publicId: background._id.toString(),
     });
-    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
+    const resolutionIssues = checkImageResolution(uploaded, qualityTargets.imageTarget);
     if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
 
     const asset = await Asset.create({
