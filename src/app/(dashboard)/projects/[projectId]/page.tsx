@@ -42,6 +42,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <Progress value={project.completionPercent ?? 0} />
       </div>
 
+      <div id="story" className="scroll-mt-6" />
+
       {!hasStory && (
         <>
           <Card>

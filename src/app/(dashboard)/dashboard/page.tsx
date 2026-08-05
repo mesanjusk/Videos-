@@ -5,6 +5,9 @@ import { countProjectsByStatus, listProjects, nextActionForStatus } from "@/modu
 import { countJobsByStatus, listRecentJobs } from "@/modules/jobs/service";
 import { getStorageUsageBytes, listRecentFinalVideos } from "@/modules/assets/service";
 import { listGoogleAccounts } from "@/modules/accounts/service";
+import { listCharacters } from "@/modules/characters/service";
+import { listBackgrounds } from "@/modules/backgrounds/service";
+import { listScenes } from "@/modules/scenes/service";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecentActivity } from "./recent-activity";
@@ -12,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { HelpButton } from "@/components/shared/help-button";
+import { WorkflowWheel } from "@/components/workflow/workflow-wheel";
+import type { WorkflowProgressCounts } from "@/lib/workflow-steps";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 MB";
@@ -37,6 +42,28 @@ export default async function DashboardPage() {
   const activeAccounts = accounts.filter((a) => a.status === "active").length;
   const recentProjects = projects.slice(0, 5);
 
+  const activeProject = projects[0];
+  let activeProjectProgress: WorkflowProgressCounts | null = null;
+  if (activeProject) {
+    const projectId = activeProject._id.toString();
+    const [characters, backgrounds, scenes] = await Promise.all([
+      listCharacters(userId, projectId),
+      listBackgrounds(userId, projectId),
+      listScenes(userId, projectId),
+    ]);
+    activeProjectProgress = {
+      hasStory: (activeProject.storyJson?.scenes?.length ?? 0) > 0,
+      charactersCount: characters.length,
+      backgroundsCount: backgrounds.length,
+      scenesCount: scenes.length,
+      scenesWithImage: scenes.filter((s) => s.imageAssetId).length,
+      scenesWithVideo: scenes.filter((s) => s.videoAssetId || s.lipSyncAssetId).length,
+      scenesWithVoice: scenes.filter((s) => s.voiceAssetId).length,
+      scenesWithLipSync: scenes.filter((s) => s.lipSyncAssetId).length,
+      isDone: activeProject.status === "done" && !!activeProject.finalVideoAssetId,
+    };
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -51,6 +78,23 @@ export default async function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      {activeProject && activeProjectProgress && (
+        <div className="overflow-hidden rounded-3xl bg-slate-950 p-6 shadow-2xl sm:p-10">
+          <div className="mx-auto mb-8 max-w-md text-center">
+            <p className="text-xs font-medium uppercase tracking-wider text-white/40">Continue where you left off</p>
+            <h2 className="mt-1 text-xl font-semibold text-white sm:text-2xl">{activeProject.title}</h2>
+            <p className="mt-1 text-sm text-white/50">Click any step to see its checklist, prompts, and status.</p>
+          </div>
+          <WorkflowWheel
+            projectId={activeProject._id.toString()}
+            progress={activeProjectProgress}
+            completionPercent={activeProject.completionPercent ?? 0}
+            quickActionHref={nextActionForStatus(activeProject.status ?? "draft").href(activeProject._id.toString())}
+            quickActionLabel={nextActionForStatus(activeProject.status ?? "draft").label}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={FolderKanban} label="Projects" value={projects.length} hint={`${finishedProjects} completed`} />
