@@ -75,6 +75,6 @@ export async function processSceneVideoAutoJob(bullJob: BullJob<BullJobData>): P
       };
     }
 
-    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result, project.activeProfileId);
+    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId!.toString(), result, project.activeProfileId);
   });
 }

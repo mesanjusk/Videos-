@@ -91,7 +91,7 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
     scene.status = "image_ready";
     await scene.save();
 
-    await advanceScene(jobDoc.userId, jobDoc.projectId.toString(), scene._id.toString());
+    await advanceScene(jobDoc.userId, jobDoc.projectId!.toString(), scene._id.toString());
 
     return { assetId: asset._id.toString() };
   });

@@ -72,7 +72,7 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
     background.assetId = asset._id;
     await background.save();
 
-    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
+    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId!.toString());
 
     return { assetId: asset._id.toString() };
   });

@@ -62,7 +62,7 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
     scene.status = scene.videoAssetId ? "complete" : "voice_ready";
     await scene.save();
 
-    await advanceScene(jobDoc.userId, jobDoc.projectId.toString(), scene._id.toString());
+    await advanceScene(jobDoc.userId, jobDoc.projectId!.toString(), scene._id.toString());
 
     return { assetId: asset._id.toString() };
   });
