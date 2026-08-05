@@ -36,6 +36,14 @@ const projectSchema = new Schema(
     },
     status: { type: String, enum: PROJECT_STATUSES, default: "draft", index: true },
     completionPercent: { type: Number, default: 0, min: 0, max: 100 },
+    // How many scenes the story step asks for — optional so every project created before this
+    // field existed keeps the prior hardcoded behavior (story.processor.ts falls back to 8).
+    sceneCount: { type: Number },
+    // Set only for projects created via a Production Profile (Module 6) — which profile, and any
+    // presets it pinned per prompt-template scope. Absent for every project created the existing
+    // manual-wizard way; those keep working identically.
+    activeProfileId: { type: Schema.Types.ObjectId, ref: "ProductionProfile" },
+    promptTemplateOverrides: { type: Schema.Types.Mixed }, // { [scope]: PromptTemplate _id }
     // "full": each step auto-enqueues the next once it can (core/queue/orchestrator.ts) — still stops
     // at manual hand-offs (video/lip-sync) since neither has a free API to call automatically.
     // "semi" (default): every step is user-triggered, matching the app's behavior before this field

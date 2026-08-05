@@ -9,8 +9,9 @@ import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
-import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
+import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 
 /** PDF Step 10 — Thumbnail. */
 export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -39,7 +40,8 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
     const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const title = project.storyJson?.title ?? project.title;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "thumbnail");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "thumbnail", promptTemplateOverrides?.thumbnail);
 
     const image = await provider.generateThumbnail(
       {
@@ -57,7 +59,8 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
       folder: `projects/${jobDoc.projectId}`,
       publicId: "thumbnail",
     });
-    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
+    const resolutionIssues = checkImageResolution(uploaded, qualityTargets.imageTarget);
     if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
 
     const asset = await Asset.create({

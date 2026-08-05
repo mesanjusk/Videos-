@@ -4,7 +4,9 @@ import { Scene } from "@/modules/scenes/models/Scene";
 import { Character } from "@/modules/characters/models/Character";
 import { Background } from "@/modules/backgrounds/models/Background";
 import { Job } from "@/modules/jobs/models/Job";
+import { Asset } from "@/modules/assets/models/Asset";
 import { enqueueJob } from "@/modules/jobs/service";
+import { completeProductionRun } from "@/modules/production-runs/service";
 
 /**
  * Full-automation auto-chain (`Project.pipelineMode === "full"`). Every function below is a no-op
@@ -117,6 +119,21 @@ async function maybeEnqueueRender(userId: string, projectId: string): Promise<vo
 
 /** Called after a render job completes successfully. */
 export async function onRenderCompleted(userId: string, projectId: string): Promise<void> {
+  // Finalizes any in-progress ProductionRun for this project (Module 6) — a no-op for projects
+  // not created from a Production Profile (completeProductionRun finds nothing and returns null).
+  // Runs regardless of pipelineMode since a profile-driven project is always "full".
+  const [failedScenes, assets, jobs] = await Promise.all([
+    Scene.find({ userId, projectId, status: "failed" }).select("_id").lean(),
+    Asset.find({ userId, projectId }).select("_id").lean(),
+    Job.find({ userId, projectId }).select("attempts").lean(),
+  ]);
+  const retryCount = jobs.reduce((sum, j) => sum + Math.max(0, (j.attempts ?? 1) - 1), 0);
+  await completeProductionRun(userId, projectId, {
+    retryCount,
+    failedSceneIds: failedScenes.map((s) => s._id.toString()),
+    generatedAssetIds: assets.map((a) => a._id.toString()),
+  }).catch(() => null);
+
   if (!(await isFullMode(userId, projectId))) return;
   await enqueueJob({ userId, projectId, type: "thumbnail", payload: {} });
 }

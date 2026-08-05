@@ -423,6 +423,49 @@ shipped are best-effort placeholders, clearly marked as needing calibration by a
 Flow access before production use. The driver's control flow (`google-flow-driver.ts`) doesn't need
 to change when they're corrected — only that one file does.
 
+## 15. AI Production Engine (2026-08 addition)
+
+The orchestration layer that lets a producer pick a **Production Profile** and generate a whole
+project from just a topic — see `docs/PRODUCTION-ENGINE-PLAN.md` for the full audit/design writeup.
+Four new collections (`ProductionProfile`, `StylePack`, `VoicePack`, `ProductionRun`), all
+*referencing* Modules 1–5's existing data rather than duplicating it:
+
+- `ProductionProfile.characterIds` → Character Library (§Module 1) — no character is ever copied.
+- `ProductionProfile.promptTemplateIds` → specific named `PromptTemplate` presets (already
+  multi-preset-per-scope) — no prompt text is ever duplicated.
+- `ProductionProfile.stylePackId` → `StylePack`, folded into `Project.customStyleDescription` at
+  generation time (`core/production-engine/style-description.ts`) — the existing "Custom" style
+  mechanism every image/video processor already reads, so no processor needed a style-specific
+  change for style packs to work.
+- `ProductionProfile.quality` → resolved by `core/production-engine/resolve-quality-targets.ts` in
+  place of Module 5's hardcoded resolution/duration/consistency-threshold constants, falling back
+  to those exact constants for any project with no profile — zero behavior change otherwise.
+- `ProductionProfile.render` (`maxParallelJobs`, `providerOverrides`, retry/recovery strategy) is
+  stored but deliberately **not consumed** by any processor yet — an abstraction layer for a future
+  rendering backend, not a browser-automation change; explicitly out of scope for this module.
+
+`core/production-engine/generate.ts` is the single "topic → Generate" entry point: creates a
+`Project` from the profile's defaults, assigns its characters (Module 1's
+`assignCharacterToProject` — links in, never copies), pins prompt presets via a new optional
+`Project.promptTemplateOverrides` field (`resolveActiveTemplate` gained one optional parameter,
+default `undefined`, so every existing call site is unaffected), sets `pipelineMode: "full"`, and
+enqueues the story job. Everything after that — scene image → video → voice → lipsync → render →
+thumbnail — is `core/queue/orchestrator.ts`'s existing full-auto chain, unmodified.
+
+**Pipeline stage is derived, not duplicated.** `core/production-engine/compute-stage.ts` computes a
+run's live stage (planning/ready/generating/rendering/quality_check/retry/completed/failed) from
+real `Project.status`/`Scene.status`/`Job.status` data — the same precedent
+`lib/workflow-steps.ts#computeStepStatuses` already established for the landing page's workflow
+wheel. `ProductionRun.stage` in the database only ever holds `"planning"` (at creation) or
+`"completed"` (written once, from a small addition to `onRenderCompleted`) — there is no second,
+separately-maintained state machine that could drift out of sync with the real one.
+
+**A real bug this caught during implementation**: a client form component importing the profile's
+Zod schema transitively imported the Mongoose model file (for one shared enum constant), pulling
+Mongoose into the browser bundle — `/production-profiles` briefly built at 327 kB First Load JS.
+Fixed with the same mongoose-free `constants.ts` pattern `modules/projects/constants.ts` already
+uses for exactly this reason; confirmed back to 185 kB via `next build`.
+
 ## 14. Quality Verification + Auto Retry (2026-08 addition)
 
 Deterministic checks (`core/quality/checks.ts`) instead of trusting every generation call's output

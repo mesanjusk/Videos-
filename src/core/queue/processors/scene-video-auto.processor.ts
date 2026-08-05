@@ -46,7 +46,8 @@ export async function processSceneVideoAutoJob(bullJob: BullJob<BullJobData>): P
       .filter((r): r is { url: string; description: string } => !!r?.url);
 
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_video");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_video", promptTemplateOverrides?.scene_video);
 
     const result = await generateVideoViaFlowAutomation(
       {
@@ -74,6 +75,6 @@ export async function processSceneVideoAutoJob(bullJob: BullJob<BullJobData>): P
       };
     }
 
-    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result);
+    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result, project.activeProfileId);
   });
 }

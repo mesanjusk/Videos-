@@ -12,8 +12,9 @@ import { uploadImageAsset } from "@/core/storage/cloudinary";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { advanceScene } from "@/core/queue/orchestrator";
-import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
+import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 
 /** PDF Step 4 — Scene Prompt Formula: character reference + background + action + camera + emotion + lighting + style. */
 export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -47,7 +48,8 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
     const providerId = await getProviderOverride(jobDoc.userId, "image");
     const provider = getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
-    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_image");
+    const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
+    const templateOverride = await resolveActiveTemplate(jobDoc.userId, "scene_image", promptTemplateOverrides?.scene_image);
 
     const image = await provider.generateSceneImage(
       {
@@ -69,7 +71,8 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
       folder: `projects/${jobDoc.projectId}/scenes/${scene._id.toString()}`,
       publicId: "image",
     });
-    const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+    const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
+    const resolutionIssues = checkImageResolution(uploaded, qualityTargets.imageTarget);
     if (resolutionIssues.length > 0) throw new QualityCheckFailedError(resolutionIssues);
 
     const asset = await Asset.create({
