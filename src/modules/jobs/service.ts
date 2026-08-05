@@ -106,7 +106,30 @@ export async function countJobsByStatus(userId: string): Promise<Record<JobStatu
     { $match: { userId } },
     { $group: { _id: "$status", count: { $sum: 1 } } },
   ]);
-  const base: Record<JobStatus, number> = { queued: 0, running: 0, manual_pending: 0, completed: 0, failed: 0, cancelled: 0 };
+  const base: Record<JobStatus, number> = {
+    queued: 0,
+    running: 0,
+    retrying: 0,
+    manual_pending: 0,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+  };
   for (const row of rows) base[row._id] = row.count;
   return base;
+}
+
+/**
+ * Every job across every project the user owns, newest-first — the Scene Queue dashboard
+ * (`/queue`), the cross-project view Job's per-project persistence never had a UI for. Filters to
+ * one status when given (the dashboard's Waiting/Running/Retrying/... chips).
+ */
+export async function listAllJobsForUser(userId: string, status?: JobStatus, limit = 100) {
+  await connectToDatabase();
+  return Job.find({ userId, ...(status ? { status } : {}) })
+    .sort({ updatedAt: -1 })
+    .limit(limit)
+    .populate("projectId", "title")
+    .populate("characterId", "name")
+    .lean();
 }

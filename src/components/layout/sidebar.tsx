@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, LayoutDashboard, FolderKanban, LibraryBig, Users, UserRound, Settings, SlidersHorizontal } from "lucide-react";
+import { Clapperboard, LayoutDashboard, FolderKanban, LibraryBig, ListChecks, Users, UserRound, Settings, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/characters", label: "Characters", icon: Users },
   { href: "/library", label: "Backgrounds", icon: LibraryBig },
+  { href: "/queue", label: "Queue", icon: ListChecks },
   { href: "/accounts", label: "Google Accounts", icon: UserRound },
   { href: "/prompts", label: "Prompt Library", icon: SlidersHorizontal },
   { href: "/settings", label: "Settings", icon: Settings },

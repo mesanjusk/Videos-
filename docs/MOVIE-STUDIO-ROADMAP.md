@@ -154,6 +154,18 @@ before Module 2 starts, per the requested workflow.
       the new project (via the same `assignCharacterToProject` from Module 1) right at creation time,
       instead of the only reuse entry point being inside a project's Characters page after the fact —
       the most natural moment to act on "reuse existing characters instead of recreating them."
-- [ ] Module 3 — Scene Queue. Pending confirmation on Module 2.
-- [ ] Module 4 — Browser Automation Engine.
+- [x] **Module 3 — Scene Queue.** Job/BullMQ were already production-grade (queued → running →
+      completed/failed/cancelled, plus manual_pending for the Google Flow hand-off, all through
+      `withJobLifecycle`); this closed the one real gap plus added the missing dashboard. Found and
+      fixed a genuine bug while doing it: a job that failed a non-final attempt just stayed
+      `"running"` in `Job.status` — indistinguishable from actually in progress — because
+      `withJobLifecycle`'s catch block only wrote a terminal status on the *last* attempt. Added
+      `"retrying"` to `JOB_STATUSES` and now every non-final failure records it (with the transient
+      error) instead of silently sitting on `"running"`. New global `/queue` page (`listAllJobsForUser`)
+      shows every job across every project with Waiting/Running/Retrying/Needs
+      you/Completed/Failed/Cancelled filter chips, cancel action for queued jobs, and links back to
+      the owning project — the cross-project view the per-project-only `Job` persistence never had a
+      UI for. `JobBadge`, `countJobsByStatus`, and the dashboard's active-jobs count all updated for
+      the new status so nothing undercounts a job that's mid-backoff.
+- [ ] Module 4 — Browser Automation Engine. Pending confirmation on Module 3.
 - [ ] Module 5 — Quality Verification + Auto Retry.

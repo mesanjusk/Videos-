@@ -37,7 +37,7 @@ export default async function DashboardPage() {
     listRecentFinalVideos(userId, 6),
   ]);
 
-  const activeJobs = jobsByStatus.queued + jobsByStatus.running + jobsByStatus.manual_pending;
+  const activeJobs = jobsByStatus.queued + jobsByStatus.running + jobsByStatus.retrying + jobsByStatus.manual_pending;
   const finishedProjects = projectsByStatus.done;
   const activeAccounts = accounts.filter((a) => a.status === "active").length;
   const recentProjects = projects.slice(0, 5);
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
         <StatCard icon={ListChecks} label="Current jobs" value={activeJobs} hint={`${jobsByStatus.manual_pending} need you`} />
         <StatCard icon={HardDrive} label="Storage used" value={formatBytes(storageBytes)} hint="Cloudinary free tier" />
         <StatCard icon={UserRound} label="Google accounts" value={accounts.length} hint={`${activeAccounts} active`} />
-        <StatCard icon={Activity} label="Queue" value={jobsByStatus.queued} hint={`${jobsByStatus.running} running now`} />
+        <StatCard icon={Activity} label="Queue" value={jobsByStatus.queued} hint={`${jobsByStatus.running} running now`} href="/queue" />
       </div>
 
       {recentVideos.length > 0 && (
