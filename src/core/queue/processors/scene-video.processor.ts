@@ -134,6 +134,6 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
       };
     }
 
-    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId.toString(), result, project.activeProfileId);
+    return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId!.toString(), result, project.activeProfileId);
   });
 }

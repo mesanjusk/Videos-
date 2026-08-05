@@ -15,6 +15,10 @@ export const JOB_TYPES = [
   "lipsync",
   "render",
   "thumbnail",
+  // Generic browser-automation execution (Module 7A) — like scene_video_auto, imports Playwright
+  // transitively (via core/browser-automation/) and is registered only in worker-only-processors.ts.
+  // Unlike every other job type, it's not always scene/project-bound (see projectId below).
+  "browser_task",
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
@@ -24,7 +28,9 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 const jobSchema = new Schema(
   {
     userId: { type: String, required: true, index: true },
-    projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true, index: true },
+    // Not `required` since Module 7A: a `browser_task` job is often a standalone browser-automation
+    // run with no owning Project/Scene. Every other job type still always supplies one.
+    projectId: { type: Schema.Types.ObjectId, ref: "Project", index: true },
     sceneId: { type: Schema.Types.ObjectId, ref: "Scene" },
     characterId: { type: Schema.Types.ObjectId, ref: "Character" },
     type: { type: String, enum: JOB_TYPES, required: true, index: true },

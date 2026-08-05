@@ -100,7 +100,7 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     character.set("sheetAssets", sheetAssets);
     await character.save();
 
-    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
+    await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId!.toString());
 
     // Within-batch consistency: every non-front-view pose compared to front-view, all generated in
     // this same call. Advisory only — threshold resolved from the project's Production Profile

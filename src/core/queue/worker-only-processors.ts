@@ -2,6 +2,7 @@ import type { Job as BullJob } from "bullmq";
 import type { JobType } from "@/modules/jobs/models/Job";
 import type { BullJobData } from "./processors/helpers";
 import { processSceneVideoAutoJob } from "./processors/scene-video-auto.processor";
+import { processBrowserTaskJob } from "./processors/browser-task.processor";
 
 /**
  * Job types that must NEVER be registered in core/queue/processors/index.ts (the shared registry
@@ -17,4 +18,5 @@ import { processSceneVideoAutoJob } from "./processors/scene-video-auto.processo
  */
 export const workerOnlyProcessorRegistry: Partial<Record<JobType, (job: BullJob<BullJobData>) => Promise<unknown>>> = {
   scene_video_auto: processSceneVideoAutoJob,
+  browser_task: processBrowserTaskJob,
 };

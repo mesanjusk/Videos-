@@ -6,7 +6,8 @@ import { runQueueTick } from "@/core/queue/worker-runtime";
 
 export interface EnqueueJobInput {
   userId: string;
-  projectId: string;
+  // Optional since Module 7A: a `browser_task` job is often not scene/project-bound.
+  projectId?: string;
   sceneId?: string;
   characterId?: string;
   type: JobType;

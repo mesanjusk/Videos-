@@ -49,7 +49,7 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     // Scene Planning (PDF workflow, between Backgrounds and Images) happens automatically here so a
     // beginner never has to manually transcribe the story into scenes — the Scene Manager (Stage 4)
     // just assigns characters/backgrounds to what's already there.
-    await createScenesFromStory(jobDoc.userId, jobDoc.projectId.toString(), story.scenes);
+    await createScenesFromStory(jobDoc.userId, jobDoc.projectId!.toString(), story.scenes);
 
     return { title: story.title, sceneCount: story.scenes.length };
   });

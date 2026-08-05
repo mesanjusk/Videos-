@@ -80,7 +80,7 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       project.completionPercent = 100;
       await project.save();
 
-      await onRenderCompleted(jobDoc.userId, jobDoc.projectId.toString());
+      await onRenderCompleted(jobDoc.userId, jobDoc.projectId!.toString());
 
       // Warning-only: compose.ts's own ffmpeg filter graph deterministically forces this
       // resolution, so a mismatch here would mean a pipeline bug, not a re-runnable generation

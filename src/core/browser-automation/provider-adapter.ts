@@ -41,3 +41,11 @@ export class InMemoryProviderRegistry implements ProviderRegistry {
     return [...this.adapters.values()];
   }
 }
+
+/**
+ * The one process-wide registry a worker process's `browser_task` processor and any future
+ * registration code share — mirrors the `core/ai/registry.ts` pattern ("the one and only place
+ * that knows concrete provider classes exist"). Empty by design: Module 7A ships zero adapters.
+ * Module 7B (or any future module) registers a real adapter here, typically at worker startup.
+ */
+export const browserProviderRegistry: ProviderRegistry = new InMemoryProviderRegistry();
