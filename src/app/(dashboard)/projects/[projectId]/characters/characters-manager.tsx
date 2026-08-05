@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, LibraryBig, MoreVertical, Plus, RefreshCcw, Users } from "lucide-react";
+import { Loader2, LibraryBig, MoreVertical, Plus, RefreshCcw, UploadCloud, Users } from "lucide-react";
 import { createCharacterSchema, type CreateCharacterInput } from "@/modules/characters/schema";
+import { useCloudinaryUpload } from "@/hooks/use-cloudinary-upload";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -124,10 +125,25 @@ function CharacterCard({
 }) {
   const router = useRouter();
   const { job, isDone } = useJobPolling(pendingJobId);
+  const { upload, uploading, error: uploadError } = useCloudinaryUpload(`/api/characters/${character.id}/sheet/upload-params`);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isDone) router.refresh();
   }, [isDone, router]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const uploaded = await upload(file);
+    if (!uploaded) return;
+    await fetch(`/api/characters/${character.id}/sheet/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(uploaded),
+    });
+    router.refresh();
+  }
 
   const isGenerating = pendingJobId && !isDone;
   const cover = character.sheetAssets.find((s) => s.pose === "front-view") ?? character.sheetAssets[0];
@@ -136,7 +152,7 @@ function CharacterCard({
     <Card>
       <CardContent className="flex gap-4 p-4">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-          {isGenerating ? (
+          {isGenerating || uploading ? (
             <Skeleton className="h-full w-full" />
           ) : cover ? (
             <Image src={cover.url} alt={character.name} width={80} height={80} className="h-full w-full object-cover" />
@@ -161,23 +177,34 @@ function CharacterCard({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={onRegenerate} disabled={!!isGenerating}>
                   <RefreshCcw className="h-4 w-4" />
-                  Regenerate
+                  Regenerate with AI
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => fileInputRef.current?.click()} disabled={uploading}>
+                  <UploadCloud className="h-4 w-4" />
+                  Upload my own image
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-destructive" onSelect={onDelete}>
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </div>
           {isGenerating ? (
             <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
               Generating turnaround sheet...
             </p>
+          ) : uploading ? (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Uploading...
+            </p>
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">{character.sheetAssets.length} images ready</p>
           )}
           {job?.status === "failed" && <p className="mt-1 text-xs text-destructive">{job.error}</p>}
+          {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
         </div>
       </CardContent>
     </Card>
