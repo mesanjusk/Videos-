@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/empty-state";
+import { QualityWarnings } from "@/components/shared/quality-warnings";
 import { useJobPolling } from "@/hooks/use-job-polling";
 
 export interface CharacterListItem {
@@ -204,6 +205,7 @@ function CharacterCard({
             <p className="mt-2 text-xs text-muted-foreground">{character.sheetAssets.length} images ready</p>
           )}
           {job?.status === "failed" && <p className="mt-1 text-xs text-destructive">{job.error}</p>}
+          <QualityWarnings job={job} />
           {uploadError && <p className="mt-1 text-xs text-destructive">{uploadError}</p>}
         </div>
       </CardContent>

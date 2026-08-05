@@ -32,6 +32,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import type { SceneStatus } from "@/modules/scenes/models/Scene";
 import { useJobPolling } from "@/hooks/use-job-polling";
+import { QualityWarnings } from "@/components/shared/quality-warnings";
+import { checkSceneCompleteness } from "@/core/quality/checks";
 
 export interface SceneListItem {
   id: string;
@@ -276,6 +278,14 @@ function SceneCard({
   const canLipSync = !!scene.videoUrl && !!scene.voiceUrl && !scene.videoStale && !scene.voiceStale;
   const isLipSyncing = lipSyncJobId && !lipSyncPoll.isDone;
   const selectedCharacters = characterOptions.filter((c) => scene.characterIds.includes(c.id));
+  const completenessIssues = checkSceneCompleteness({
+    status: scene.status,
+    dialogue: scene.dialogue,
+    imageAssetId: scene.imageUrl,
+    videoAssetId: scene.videoUrl,
+    voiceAssetId: scene.voiceUrl,
+    lipSyncAssetId: scene.lipSyncUrl,
+  });
 
   return (
     <Reorder.Item value={scene} dragListener={false} dragControls={dragControls} as="div">
@@ -304,6 +314,16 @@ function SceneCard({
                       {scene.emotion}
                     </span>
                   </div>
+                )}
+                {!editing && completenessIssues.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {completenessIssues.map((issue, i) => (
+                      <li key={i} className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </div>
@@ -477,6 +497,7 @@ function SceneCard({
                   </p>
                 )}
                 {autoVideoError && <p className="text-xs text-destructive">{autoVideoError}</p>}
+                <QualityWarnings job={videoPoll.job} />
               </div>
             )}
           </div>

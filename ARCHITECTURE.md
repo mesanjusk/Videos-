@@ -422,3 +422,38 @@ this codebase has no real Google account or network path to it to verify against
 shipped are best-effort placeholders, clearly marked as needing calibration by an operator with real
 Flow access before production use. The driver's control flow (`google-flow-driver.ts`) doesn't need
 to change when they're corrected — only that one file does.
+
+## 14. Quality Verification + Auto Retry (2026-08 addition)
+
+Deterministic checks (`core/quality/checks.ts`) instead of trusting every generation call's output
+at face value:
+
+- `checkImageResolution` compares Cloudinary's *measured* width/height post-upload against the
+  4:5 (1080×1350) / final-render (1080×1920) targets this document already declares — deliberately
+  not the generation provider's self-reported dimensions (`gemini-image.ts` currently hardcodes
+  `width: 1080, height: 1350` regardless of what Gemini actually returned; checking a claim against
+  itself would prove nothing).
+- `checkVideoDuration` against the PDF's 5-8s scene-clip clamp.
+- `checkSceneCompleteness` flags a scene whose `status` implies an asset (image/video/voice) it
+  doesn't actually have — a read-only integrity check, not a retry trigger.
+
+**Auto Retry is a refactor of existing machinery, not a new system.** `QualityCheckFailedError`
+(`core/quality/errors.ts`) is thrown from inside the same processor `run()` callback every other
+processor error already flows through
+(`core/queue/processors/helpers.ts#withJobLifecycle`) — so it gets BullMQ's existing
+attempts/backoff and the Scene Queue module's `"retrying"` status for free. Retries are now
+triggered by *validated bad output* on AI-synchronous generation paths (character sheet,
+background, scene image, thumbnail resolution; the browser-automation video path's duration) —
+not just "the call happened to throw." A human-uploaded manual video hand-off is deliberately never
+auto-retried on a quality check: that would silently discard someone's deliberate upload, so a
+duration mismatch there becomes a UI warning instead, never a forced regeneration.
+
+**Character consistency is a structural heuristic, not an ML claim.** `core/quality/perceptual-hash.ts`
+computes a difference-hash (dHash) via `sharp` — a dependency the prior codebase audit flagged as
+declared-but-unused, now genuinely wired up — and compares a character's generated poses to its own
+front-view pose, both from the same generation batch (comparable compositions, unlike comparing a
+character portrait to an unrelated full scene shot). Below-threshold similarity is recorded as a
+warning only, surfaced via a shared `QualityWarnings` component wherever a producer is already
+looking (Character Library, Scene Manager) — never a retry trigger, the same "advisory, not
+automated judgment" posture this codebase already takes toward anything it can't verify with
+certainty (see §13's selectors caveat for the same spirit).

@@ -6,11 +6,20 @@ import { Asset } from "@/modules/assets/models/Asset";
 import { resolveGenerationAccount } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
-import { uploadImageAsset } from "@/core/storage/cloudinary";
+import { uploadImageAsset, toBuffer } from "@/core/storage/cloudinary";
 import type { CharacterPose } from "@/core/ai/types";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
 import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
+import { checkImageResolution, TARGET_IMAGE_4_5 } from "@/core/quality/checks";
+import { QualityCheckFailedError } from "@/core/quality/errors";
+import { computeDHash, dHashSimilarity } from "@/core/quality/perceptual-hash";
+import type { QualityIssue } from "@/core/quality/types";
+
+/** Below this dHash similarity to the front-view pose, a pose is flagged as a possible
+ * consistency miss — advisory only (some divergence between "front-view" and "running-pose" is
+ * normal), never a retry trigger. See core/quality/perceptual-hash.ts for what dHash is and isn't. */
+const CONSISTENCY_WARNING_THRESHOLD = 0.45;
 
 // The Character Library's "Expressions" set — front view plus the emotions/poses a producer
 // needs across scenes, so a new character is reuse-ready without a second generation pass.
@@ -61,6 +70,7 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
     await recordAccountUsage(accountId);
 
     const sheetAssets = [];
+    const poseHashes: Partial<Record<CharacterPose, string>> = {};
     for (const pose of poses) {
       const image = images[pose];
       if (!image) continue;
@@ -68,6 +78,13 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
         folder: `projects/${jobDoc.projectId}/characters/${character._id.toString()}`,
         publicId: pose,
       });
+      const resolutionIssues = checkImageResolution(uploaded, TARGET_IMAGE_4_5);
+      if (resolutionIssues.length > 0) {
+        throw new QualityCheckFailedError(resolutionIssues.map((i) => ({ ...i, message: `[${pose}] ${i.message}` })));
+      }
+
+      poseHashes[pose] = await computeDHash(await toBuffer(image.data)).catch(() => undefined);
+
       const asset = await Asset.create({
         userId: jobDoc.userId,
         projectId: jobDoc.projectId,
@@ -86,6 +103,24 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
 
     await onCharacterOrBackgroundReady(jobDoc.userId, jobDoc.projectId.toString());
 
-    return { poseCount: sheetAssets.length };
+    // Within-batch consistency: every non-front-view pose compared to front-view, all generated in
+    // this same call. Advisory only — see CONSISTENCY_WARNING_THRESHOLD's comment.
+    const qualityIssues: QualityIssue[] = [];
+    const frontHash = poseHashes["front-view"];
+    if (frontHash) {
+      for (const [pose, hash] of Object.entries(poseHashes) as [CharacterPose, string][]) {
+        if (pose === "front-view" || !hash) continue;
+        const similarity = dHashSimilarity(frontHash, hash);
+        if (similarity < CONSISTENCY_WARNING_THRESHOLD) {
+          qualityIssues.push({
+            severity: "warning",
+            check: "character-consistency",
+            message: `"${pose}" looks quite different from "front-view" (${Math.round(similarity * 100)}% similar) — worth a visual check.`,
+          });
+        }
+      }
+    }
+
+    return { poseCount: sheetAssets.length, qualityIssues };
   });
 }

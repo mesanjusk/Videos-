@@ -62,7 +62,7 @@ function uploadBuffer(buffer: Buffer, opts: UploadOptions): Promise<UploadedAsse
 }
 
 /** Accepts either raw bytes or a provider-hosted URL (fetched first) and uploads to Cloudinary. */
-async function toBuffer(data: Buffer | string): Promise<Buffer> {
+export async function toBuffer(data: Buffer | string): Promise<Buffer> {
   if (Buffer.isBuffer(data)) return data;
   if (/^https?:\/\//.test(data)) {
     const res = await fetch(data);
