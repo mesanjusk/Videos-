@@ -31,6 +31,12 @@ to run the job queue (Vercel's serverless tick vs. the standalone `worker.ts`).
 
 `npm run typecheck`, `npm run lint`, and `npm run build` are all clean against the current code.
 
+## Claude Code plugin
+
+`plugin/` drives this same 10-step pipeline from Claude Code instead of the browser UI — one Skill
+per PDF workflow step plus a `run-pipeline` orchestrator, authenticating with a personal API token
+(mint one at Settings → API tokens) instead of a session cookie. See `plugin/README.md` for setup.
+
 ## Documentation
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — system design: provider abstraction, Google Account Manager,

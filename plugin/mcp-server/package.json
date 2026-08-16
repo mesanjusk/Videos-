@@ -1,0 +1,15 @@
+{
+  "name": "cartoon-workflow-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP server for the AI Video Studio Claude Code plugin — wraps the app's REST API (Gemini/Google-only pipeline) plus Google Flow browser automation.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  }
+}

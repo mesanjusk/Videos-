@@ -184,8 +184,16 @@ export class DefaultTaskEngine implements TaskEngine {
       // Completed (Executing -> Completed), handled after the loop.
       if (hasMoreSteps) await this.deps.stateEngine.transition(runId, "waiting", completedSteps);
 
-      if (step.action === "download_file") downloads.push({ path: `download-${step.id}` });
-      if (step.action === "screenshot") screenshots.push(`screenshot-${step.id}`);
+      // Module 7B: use the real path a provider's executeAction() returned (see
+      // ProviderAdapter.executeAction's doc comment) rather than a placeholder — falls back to one
+      // only if a provider genuinely didn't report one, so this stays non-breaking for adapters
+      // that predate the extension.
+      if (step.action === "download_file") {
+        downloads.push({ path: (result.output?.downloadPath as string) ?? `download-${step.id}` });
+      }
+      if (step.action === "screenshot") {
+        screenshots.push((result.output?.screenshotPath as string) ?? `screenshot-${step.id}`);
+      }
       if (executionMonitor) await executionMonitor.record(runId, { level: "info", message: `Completed step ${step.id} (${step.action})` });
     }
 
