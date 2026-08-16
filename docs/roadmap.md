@@ -68,3 +68,15 @@ large diff.
       (project detail, the wizard) — every screen now explains itself per the beginner-friendly UX
       requirement. `docs/database-schema.md`, `docs/api-reference.md`, and `docs/deployment.md` added,
       reflecting the schema/routes/ops story as actually built, not as originally planned.
+- [x] **Module 7B + API tokens + Claude Code plugin.** The first real `ProviderAdapter` on Module 7A's
+      browser-automation framework (`core/browser-automation-providers/google-flow`, ARCHITECTURE.md
+      §17) — drives labs.google/flow generically instead of Module 4's hardcoded sequence, registered
+      once at `worker.ts` startup, alongside a small justified extension to `ProviderAdapter.executeAction`
+      so real download/screenshot paths reach `TaskResult` instead of a placeholder. `modules/api-tokens`
+      (ARCHITECTURE.md §16) gives non-browser callers a `Bearer` credential — `requireUserId()` now
+      checks it before falling back to the session cookie, with zero changes to any of the 60+ routes
+      that call it, plus a Settings UI section to mint/revoke tokens. `plugin/` is a self-contained
+      Claude Code plugin (21 MCP tools, one Skill per PDF workflow step + a `run-pipeline`
+      orchestrator) that drives the whole pipeline through the app's REST API — Gemini via API,
+      Google Flow via the automation above or a manual hand-off, and lip sync/music left as the
+      honest manual steps they already were (no Google tool does either).

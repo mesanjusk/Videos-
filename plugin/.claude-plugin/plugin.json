@@ -1,0 +1,8 @@
+{
+  "name": "ai-video-studio",
+  "description": "Automates the PDF 'Complete AI Cartoon Workflow' (story -> characters -> backgrounds -> scenes -> video -> voice -> render -> thumbnail) using only Google tools: Gemini via API wherever an API exists, human-like Playwright browser automation against Google Flow wherever it doesn't.",
+  "version": "1.0.0",
+  "displayName": "AI Video Studio",
+  "author": { "name": "AI Video Studio" },
+  "homepage": "../README.md"
+}

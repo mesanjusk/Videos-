@@ -10,6 +10,9 @@ export interface ActionPipelineResult {
   success: boolean;
   error?: string;
   attempts: number;
+  /** Whatever `provider.executeAction()` returned for this step — see the doc comment on
+   * `ProviderAdapter.executeAction` for why this exists (Module 7B). */
+  output?: Record<string, unknown>;
 }
 
 /** Validate -> Execute -> Verify -> Success | Failure -> Recovery -> Retry, per TaskStep. */
@@ -72,12 +75,12 @@ export class DefaultActionPipeline implements ActionPipeline {
       eventBus.emit({ runId, event: "ActionStarted", timestamp: new Date(), data: { stepId: step.id, action: step.action } });
 
       try {
-        await provider.executeAction(currentPage, step, actionEngine);
+        const output = (await provider.executeAction(currentPage, step, actionEngine)) ?? undefined;
         const verified = step.verify ? await provider.verifyResult(currentPage, step) : true;
         if (!verified) throw new Error(`Verification failed for step ${step.id}`);
 
         eventBus.emit({ runId, event: "ActionCompleted", timestamp: new Date(), data: { stepId: step.id } });
-        return { step, success: true, attempts: attempt };
+        return { step, success: true, attempts: attempt, output };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         eventBus.emit({ runId, event: "ActionFailed", timestamp: new Date(), data: { stepId: step.id, error: errorMessage } });

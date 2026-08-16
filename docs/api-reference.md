@@ -1,6 +1,7 @@
 # API Reference
 
-All routes live under `src/app/api`, require a signed-in session (`requireUserId()` —
+All routes live under `src/app/api`, require authentication (`requireUserId()` — either the NextAuth
+session cookie, or an `Authorization: Bearer <token>` API token, see ARCHITECTURE.md §16 —
 `401 { error: "Unauthorized" }` otherwise), and are scoped to that user; there is no cross-user
 access path. Every route is `export const dynamic = "force-dynamic"` — none are statically rendered
 (ARCHITECTURE.md §6). Routes that enqueue work return `202` with the created `Job`; poll
@@ -52,7 +53,28 @@ access path. Every route is `export const dynamic = "force-dynamic"` — none ar
 - `POST /api/scenes/:id/video/upload` — `{ taskId, url, publicId, durationSeconds, bytes? }`. Completes
   the manual hand-off: records the clip as an `Asset`, flips the scene to `video_ready`, and marks the
   `manual_pending` `Job` completed. `taskId` must match the scene's current `videoTaskId` (409 otherwise).
+- `POST /api/scenes/:id/video/auto` → enqueues a `scene_video_auto` job (Module 4's Google Flow
+  browser automation — worker-only, see ARCHITECTURE.md §13; 400 if no account has a connected Flow
+  session).
 - `POST /api/scenes/:id/voice` → enqueues a `voice` job (400 if the scene has no dialogue).
+- `POST /api/scenes/:id/lipsync` / `POST /api/scenes/:id/lipsync/upload` — always `manual_pending`
+  (no Google lip-sync provider exists); the upload route completes the hand-off the same shape as
+  the video one.
+
+## Browser Automation (Module 7A/7B — see ARCHITECTURE.md §13/§17)
+
+- `GET|POST /api/browser-automation/sessions` — list / save a persisted Playwright `storageState()`.
+- `GET|POST /api/browser-automation/tasks` — list runs / enqueue a `browser_task` job
+  (`{ providerId, sessionId?, steps[], metadata?, projectId? }`); `providerId: "google-flow"` is the
+  only adapter currently registered.
+- `POST /api/browser-automation/tasks/:id/cancel|pause|resume|restart` — cooperative run control.
+- `GET|POST /api/browser-automation/providers` — per-user provider config + which adapters are
+  actually registered in the running worker process.
+
+## API tokens (ARCHITECTURE.md §16)
+
+- `GET|POST /api/api-tokens` — list (redacted) / create (`{ name }`, returns the raw token once).
+- `DELETE /api/api-tokens/:id` — revoke.
 
 ## Jobs
 

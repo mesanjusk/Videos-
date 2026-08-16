@@ -13,7 +13,17 @@ export interface ProviderAdapter {
   readonly label: string;
   initialize(context: { page: Page; task: BrowserTask }): Promise<void>;
   validate(task: BrowserTask): Promise<{ valid: boolean; reason?: string }>;
-  executeAction(page: Page, step: TaskStep, engine: ActionEngine): Promise<void>;
+  /**
+   * Returns an optional step output bag — e.g. `{ downloadPath }` for a `download_file` step,
+   * `{ screenshotPath }` for `screenshot` — threaded back through `ActionPipelineResult.output` to
+   * `TaskEngine.run()`'s `downloads`/`screenshots` bookkeeping (Module 7B's one interface extension
+   * to 7A: the original signature returned `void`, which made every recorded download/screenshot a
+   * placeholder path (`download-${step.id}`) instead of the file `ActionEngine` actually produced —
+   * see `action-engine.ts#downloadFile`/`captureScreenshot`, both of which already return a real
+   * path that had nowhere to go). Providers that don't produce a file (most steps) simply return
+   * nothing, exactly as before.
+   */
+  executeAction(page: Page, step: TaskStep, engine: ActionEngine): Promise<Record<string, unknown> | void>;
   verifyResult(page: Page, step: TaskStep): Promise<boolean>;
   recover(context: RecoveryContext): Promise<RecoveryAction>;
   shutdown(): Promise<void>;

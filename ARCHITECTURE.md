@@ -295,15 +295,17 @@ src/
     (dashboard)/            authenticated shell: dashboard, projects, accounts, settings
     api/                    route handlers per §6
   modules/                  feature-based domain modules (model + service per feature)
-    accounts/ projects/ characters/ backgrounds/ scenes/ jobs/ assets/ prompt-templates/
+    accounts/ projects/ characters/ backgrounds/ scenes/ jobs/ assets/ prompt-templates/ api-tokens/ (§16)
   core/                     cross-cutting, host-agnostic
     ai/                     provider interfaces + registry + vendor implementations (§2)
     prompt-engine/          §8
     queue/                  connection, queue defs, tick runtime, processors (§7)
     ffmpeg/                 §9
+    browser-automation/     Module 7A's provider-agnostic framework (§13)
+    browser-automation-providers/google-flow/  Module 7B's ProviderAdapter (§17) — worker-only, never core/browser-automation/'s own import
     storage/                cloudinary.ts (upload, signed-upload params, delete)
     db/                     mongoose.ts (cached connection), mongo-client.ts (native, NextAuth adapter)
-    auth/                   NextAuth config, session helpers, encryption util for §3
+    auth/                   NextAuth config, session helpers, encryption util for §3, requireUserId() Bearer support (§16)
   components/
     ui/                     shadcn primitives
     shared/                 Stepper, EmptyState, LoadingSkeleton, HelpButton, ProgressBar, JobBadge
@@ -312,6 +314,7 @@ src/
   lib/                      utils.ts (cn, formatters), constants.ts
   types/                    shared TS types not owned by a module
 worker.ts                   optional standalone worker (self-hosted fallback, §7)
+plugin/                     Claude Code plugin driving this app's API end to end (§16)
 docs/                       database-schema.md, api-reference.md, deployment.md, roadmap.md
 ```
 
@@ -490,6 +493,53 @@ background, scene image, thumbnail resolution; the browser-automation video path
 not just "the call happened to throw." A human-uploaded manual video hand-off is deliberately never
 auto-retried on a quality check: that would silently discard someone's deliberate upload, so a
 duration mismatch there becomes a UI warning instead, never a forced regeneration.
+
+## 16. API tokens + Claude Code plugin (2026-08 addition)
+
+Everything in §1-15 is reachable only through a browser session (NextAuth cookie via `requireUserId()`
+→ `auth()`). A Claude Code plugin driving this app's API from outside a browser needs a different
+credential — `modules/api-tokens/` (`ApiToken` model: `{userId, name, tokenHash, tokenPrefix}`, only
+the SHA-256 hash persisted, raw token shown once at creation, Settings page UI) is that credential.
+`core/auth/session.ts#requireUserId()` now checks `headers().get("authorization")` for a
+`Bearer <token>` first, falling back to the session cookie — a change to one function, not to any of
+the 60+ route handlers that call it, since `headers()` reads the current request without needing one
+passed in. A present-but-invalid Bearer header fails closed rather than silently falling back to an
+unrelated session cookie on the same request.
+
+`plugin/` is a self-contained Claude Code plugin (own `.claude-plugin/plugin.json`, `.mcp.json`, and
+`skills/`) that authenticates with one of these tokens and drives the PDF pipeline end to end —
+story → characters → backgrounds → scene images → video → voice → render → thumbnail — as one Skill
+per step plus a `run-pipeline` orchestrator, entirely through this app's existing REST API. It never
+calls Gemini/Veo/any vendor directly; see `plugin/README.md` for setup and the full tool list.
+
+## 17. Module 7B — the first real browser-automation ProviderAdapter (2026-08 addition)
+
+Module 7A (§13, "Browser Automation Engine") shipped a provider-agnostic framework with
+`browserProviderRegistry` deliberately empty — no adapter, so every `browser_task` job failed
+immediately and honestly with "No provider registered". Module 7B fills that in:
+`src/core/browser-automation-providers/google-flow/` (`adapter.ts`'s `GoogleFlowProviderAdapter`,
+`build-task.ts`, `register.ts`, registered once at `worker.ts` startup) drives labs.google/flow
+through the framework's generic `ActionEngine`/`TaskStep` vocabulary instead of Module 4's hardcoded
+step sequence — reusing Module 4's `FLOW_SELECTORS`/`FLOW_TIMEOUTS_MS` rather than duplicating a
+second guess at them, same "unverified against the live product, recalibrate one file" caveat.
+
+**Deliberately does not replace Module 4.** `scene_video_auto` (Module 4) is a complete,
+already-working Scene-to-Cloudinary pipeline; Module 7B is the generic entry point
+(`POST /api/browser-automation/tasks` with `providerId: "google-flow"`, or the plugin's
+`run_google_flow_browser_task` tool) for ad hoc Flow automation with no Scene attached. Both paths
+now exist side by side, per the choice the 7A plan doc explicitly left open ("possibly on top of
+this framework, possibly replacing Module 4's ad-hoc version — a decision left to that module").
+
+**One small, justified extension to the 7A framework itself**: `ProviderAdapter.executeAction`
+originally returned `Promise<void>`, so `TaskEngine.run()`'s download/screenshot bookkeeping could
+only ever push a placeholder path (`download-${step.id}`) — `ActionEngine.downloadFile`/
+`captureScreenshot` already returned the real path, it just had nowhere to go. `executeAction` now
+returns `Promise<Record<string, unknown> | void>`, threaded through `ActionPipelineResult.output` to
+`TaskEngine.run()`, so a real provider can report `{ downloadPath }`/`{ screenshotPath }`. Backward
+compatible (broadens a return type on an interface 7A shipped with zero implementations, so nothing
+existing could depend on the old placeholder behavior) and confirmed via `next build` that none of
+`core/browser-automation-providers/*` reaches any route's server bundle — same isolation check every
+prior automation module has run.
 
 **Character consistency is a structural heuristic, not an ML claim.** `core/quality/perceptual-hash.ts`
 computes a difference-hash (dHash) via `sharp` — a dependency the prior codebase audit flagged as

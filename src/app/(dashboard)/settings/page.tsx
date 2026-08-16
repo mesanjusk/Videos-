@@ -2,12 +2,14 @@ import { auth } from "@/core/auth/auth";
 import { listEnabledProviders } from "@/core/ai/registry";
 import { getOrCreateSettings } from "@/modules/settings/service";
 import { requireUserId } from "@/core/auth/session";
+import { listApiTokens } from "@/modules/api-tokens/service";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { HelpButton } from "@/components/shared/help-button";
 import { ProviderSettings } from "./provider-settings";
 import { LanguageSetting } from "./language-setting";
+import { ApiTokens } from "./api-tokens";
 
 function statusBadge(configured: boolean) {
   return <Badge variant={configured ? "success" : "secondary"}>{configured ? "Connected" : "Not configured"}</Badge>;
@@ -18,6 +20,7 @@ export default async function SettingsPage() {
   const userId = await requireUserId();
   const settings = await getOrCreateSettings(userId);
   const providers = listEnabledProviders();
+  const apiTokens = await listApiTokens(userId);
 
   const systemStatus = [
     { label: "MongoDB Atlas", configured: !!process.env.MONGODB_URI },
@@ -81,6 +84,28 @@ export default async function SettingsPage() {
               voice: settings.providerOverrides?.voice ?? undefined,
               lipsync: settings.providerOverrides?.lipsync ?? undefined,
             }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>API tokens</CardTitle>
+          <CardDescription>
+            For non-browser clients — like the Claude Code plugin (see <code>plugin/</code> in the repo) — that
+            drive this app&apos;s API without a browser session. Mint a token here, then set it as the plugin&apos;s{" "}
+            <code>CARTOON_API_TOKEN</code> environment variable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ApiTokens
+            initialTokens={apiTokens.map((t) => ({
+              id: t._id.toString(),
+              name: t.name,
+              tokenPrefix: t.tokenPrefix,
+              lastUsedAt: t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : undefined,
+              createdAt: new Date(t.createdAt as Date).toISOString(),
+            }))}
           />
         </CardContent>
       </Card>

@@ -21,9 +21,15 @@ import { getRedisConnection } from "./src/core/queue/connection";
 import { processorRegistry } from "./src/core/queue/processors";
 import { workerOnlyProcessorRegistry } from "./src/core/queue/worker-only-processors";
 import { connectToDatabase } from "./src/core/db/mongoose";
+import { registerGoogleFlowProvider } from "./src/core/browser-automation-providers/google-flow/register";
 
 async function main() {
   await connectToDatabase();
+  // Module 7B: the only real ProviderAdapter the 7A browser-automation framework ships with —
+  // registering it here (not at import time in provider-adapter.ts) keeps browserProviderRegistry
+  // itself provider-agnostic; worker.ts is the one process that's supposed to know concrete
+  // providers exist, same precedent as workerOnlyProcessorRegistry just below.
+  registerGoogleFlowProvider();
   const connection = getRedisConnection();
 
   const workers = Object.entries({ ...processorRegistry, ...workerOnlyProcessorRegistry }).map(

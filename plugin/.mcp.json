@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cartoon-workflow": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/index.js"],
+      "env": {
+        "CARTOON_APP_BASE_URL": "${CARTOON_APP_BASE_URL}",
+        "CARTOON_API_TOKEN": "${CARTOON_API_TOKEN}"
+      }
+    }
+  }
+}
