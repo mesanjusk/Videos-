@@ -76,6 +76,19 @@ access path. Every route is `export const dynamic = "force-dynamic"` — none ar
 - `GET|POST /api/api-tokens` — list (redacted) / create (`{ name }`, returns the raw token once).
 - `DELETE /api/api-tokens/:id` — revoke.
 
+## Instagram auto-reply (ARCHITECTURE.md §18)
+
+- `GET /api/instagram/connect` — starts the Facebook OAuth consent flow; redirects to Meta.
+- `GET /api/instagram/callback` — Meta's OAuth redirect target; stores every connected Page's
+  Instagram account, then redirects to `/instagram?connected=1` (or `?error=...`).
+- `PATCH /api/instagram/:id` — `{ autoReplyEnabled: boolean }`.
+- `DELETE /api/instagram/:id` — disconnect.
+- `GET|POST /api/webhooks/instagram` — Meta's webhook: `GET` is the one-time subscription-verify
+  handshake; `POST` receives every inbound DM event (signature-verified against
+  `INSTAGRAM_APP_SECRET`), enqueues an `instagram_reply` job per real inbound text message, and is
+  the one route in this app that is deliberately **not** scoped by the calling user (there isn't
+  one — see `modules/instagram/service.ts#findAccountByInstagramUserId`).
+
 ## Jobs
 
 - `GET /api/jobs/:id` — poll target for every async operation above.

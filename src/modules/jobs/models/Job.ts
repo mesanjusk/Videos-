@@ -19,6 +19,10 @@ export const JOB_TYPES = [
   // transitively (via core/browser-automation/) and is registered only in worker-only-processors.ts.
   // Unlike every other job type, it's not always scene/project-bound (see projectId below).
   "browser_task",
+  // Instagram auto-reply (ARCHITECTURE.md §18) — a fast API-only job (Gemini + Meta Graph API, no
+  // Playwright), registered in the shared processorRegistry like voice/thumbnail. Not scene/project
+  // -bound; see projectId below.
+  "instagram_reply",
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

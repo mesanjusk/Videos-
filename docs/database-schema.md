@@ -109,7 +109,7 @@ The source of truth the UI polls (`GET /api/jobs/:id`) — every async unit of w
 | Field | Type | Notes |
 |---|---|---|
 | `userId`, `projectId`, `sceneId?`, `characterId?` | | |
-| `type` | enum | `story` \| `character_image` \| `background_image` \| `scene_image` \| `scene_video` \| `voice` \| `render` \| `thumbnail` |
+| `type` | enum | `story` \| `character_image` \| `background_image` \| `scene_image` \| `scene_video` \| `scene_video_auto` \| `voice` \| `lipsync` \| `render` \| `thumbnail` \| `browser_task` \| `instagram_reply` |
 | `status` | enum | `queued` → `running` → `completed` \| `manual_pending` \| `failed` \| `cancelled` |
 | `attempts` | Number | |
 | `googleAccountId` | ObjectId → GoogleAccount | which pooled account served this attempt |
@@ -139,7 +139,38 @@ first access (`modules/prompt-templates/service.ts#getOrSeedTemplate`).
 | Field | Type |
 |---|---|
 | `userId` | |
-| `scope` | `story` \| `character` \| `background` \| `scene_image` \| `scene_video` \| `voice` \| `thumbnail` |
+| `scope` | `story` \| `character` \| `background` \| `scene_image` \| `scene_video` \| `voice` \| `thumbnail` \| `music` \| `instagram_reply` |
 | `name`, `template`, `variables[]`, `appendConsistencyFormula`, `isDefault` | |
 
 Unique on `{userId, scope, name}`.
+
+## InstagramAccount (`modules/instagram/models/InstagramAccount.ts`)
+
+A connected Instagram professional account, reachable through its linked Facebook Page (ARCHITECTURE.md §18).
+
+| Field | Type | Notes |
+|---|---|---|
+| `userId` | String | owner |
+| `instagramUserId` | String | IG-scoped business account id — what inbound webhook events key on |
+| `username`, `name`, `profilePictureUrl` | String | |
+| `pageId`, `pageName` | String | the linked Facebook Page |
+| `credentials.pageAccessTokenEnc` | String | AES-256-GCM ciphertext of the Page access token |
+| `autoReplyEnabled` | Boolean | explicit opt-in, default `false` |
+| `status` | enum | `active` \| `disabled` \| `token_expired` \| `error` |
+| `lastWebhookAt`, `lastError` | | |
+
+Unique on `{userId, instagramUserId}`. Also indexed on `instagramUserId` alone — webhook events carry
+no app userId, so `findAccountByInstagramUserId` is a deliberate, documented exception to this file's
+"every query is scoped by userId" opening line.
+
+## InstagramMessage (`modules/instagram/models/InstagramMessage.ts`)
+
+Append-only log of inbound DMs and the auto-reply (if any) sent back.
+
+| Field | Type | Notes |
+|---|---|---|
+| `userId`, `instagramAccountId` | | |
+| `senderId` | String | the customer's IG-scoped id |
+| `incomingText`, `replyText` | String | `replyText` unset when `status` is `skipped`/`failed` |
+| `status` | enum | `replied` \| `failed` \| `skipped` |
+| `error` | String | |

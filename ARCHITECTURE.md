@@ -295,7 +295,7 @@ src/
     (dashboard)/            authenticated shell: dashboard, projects, accounts, settings
     api/                    route handlers per §6
   modules/                  feature-based domain modules (model + service per feature)
-    accounts/ projects/ characters/ backgrounds/ scenes/ jobs/ assets/ prompt-templates/ api-tokens/ (§16)
+    accounts/ projects/ characters/ backgrounds/ scenes/ jobs/ assets/ prompt-templates/ api-tokens/ (§16) instagram/ (§18)
   core/                     cross-cutting, host-agnostic
     ai/                     provider interfaces + registry + vendor implementations (§2)
     prompt-engine/          §8
@@ -303,6 +303,7 @@ src/
     ffmpeg/                 §9
     browser-automation/     Module 7A's provider-agnostic framework (§13)
     browser-automation-providers/google-flow/  Module 7B's ProviderAdapter (§17) — worker-only, never core/browser-automation/'s own import
+    instagram/               Meta Graph API client (§18) — the one non-Google vendor integration in this codebase
     storage/                cloudinary.ts (upload, signed-upload params, delete)
     db/                     mongoose.ts (cached connection), mongo-client.ts (native, NextAuth adapter)
     auth/                   NextAuth config, session helpers, encryption util for §3, requireUserId() Bearer support (§16)
@@ -550,3 +551,53 @@ warning only, surfaced via a shared `QualityWarnings` component wherever a produ
 looking (Character Library, Scene Manager) — never a retry trigger, the same "advisory, not
 automated judgment" posture this codebase already takes toward anything it can't verify with
 certainty (see §13's selectors caveat for the same spirit).
+
+## 18. Instagram auto-reply (2026-08 addition)
+
+The one deliberate exception to this app's "Google tools only" scope — Instagram isn't a Google
+product, but a creator running this studio asked for auto-replying to Instagram DMs, and Meta
+provides an official API for exactly that. Kept as narrow as the request: **auto-reply to messages
+a customer sends first, nothing else.** No auto-DMing new followers, no cold outreach, no browser
+automation of the Instagram app/website — Meta's platform terms prohibit all of that whether it's
+done through their API or by scripting the UI, and unlike the Google Flow case (§13/§17, "no public
+API exists so act like a human instead"), an official API exists here specifically *because* Meta
+wants outreach-style messaging kept off the unofficial path. There is no compliant version of that
+to build, so this module doesn't attempt one.
+
+**Flow**: customer DMs the connected Instagram professional account → Meta calls this app's webhook
+→ webhook verifies the signature, resolves which connected account/user the event belongs to, and
+enqueues an `instagram_reply` job (not the reply itself — Meta expects a fast response, so the
+Gemini call and the Send API call happen in the queue processor, same "validate → enqueue → 202"
+shape every generation route already uses) → the processor drafts a reply with Gemini (reusing the
+pooled Google Account Manager's quota/rotation, §3) and sends it back via Meta's Send API, only ever
+within the 24-hour window that's already guaranteed by replying immediately to an inbound message.
+
+**OAuth**: Instagram messaging has no standalone OAuth — it's only reachable through a linked
+Facebook Page's own login (`core/instagram/graph-api.ts`). `GET /api/instagram/connect` starts
+Meta's consent dialog with a `state` param that's the app's own AES-256-GCM ciphertext of
+`{userId, nonce}` (reusing `core/auth/encryption.ts`, same as every other stored credential in this
+app) rather than a plain value paired with a separately-stored nonce — tamper-proof without needing
+a cookie to survive the round trip through Meta's domain. `GET /api/instagram/callback` exchanges
+the code for a long-lived Page access token per connected Page-with-Instagram, encrypts and stores
+one `InstagramAccount` per page (`modules/instagram/models/InstagramAccount.ts`).
+
+**Auto-reply is opt-in and per-account, off by default** (`InstagramAccount.autoReplyEnabled`).
+Connecting an account only makes replying *possible* — a human still has to turn it on from
+`/instagram`, and the processor re-checks the flag at send time (not just at webhook-receive time)
+in case it was switched off in between.
+
+**Webhook auth**: `POST /api/webhooks/instagram` verifies Meta's `X-Hub-Signature-256` header
+(HMAC-SHA256 over the raw body, `INSTAGRAM_APP_SECRET`) before parsing anything — an unsigned or
+mis-signed POST is rejected outright, never trusted as "probably Meta." Every echo of the app's own
+outbound replies (Meta bounces those back through the same webhook) is skipped by
+`message.is_echo`, the one thing standing between this and an infinite reply loop.
+
+**Every inbound event and outbound reply is logged** (`InstagramMessage`) — the only record of what
+an auto-reply actually said, since Meta's own inbox doesn't expose that back to the API.
+
+**Honest gap, unavoidable from this codebase**: going live — replying to real customers, not just
+the up-to-25 testers a Meta app can message before review — requires Meta App Review approval for
+`instagram_manage_messages`, a manual process in the Meta Developer dashboard this codebase can't
+complete on anyone's behalf. `core/instagram/graph-api.ts` is also unverified against a live Meta
+app/Instagram account (this sandbox has no real one to test against) — same "recalibrate against
+the real product before trusting it" caveat already applied to `core/automation/selectors.ts`.

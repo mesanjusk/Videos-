@@ -80,3 +80,13 @@ large diff.
       orchestrator) that drives the whole pipeline through the app's REST API — Gemini via API,
       Google Flow via the automation above or a manual hand-off, and lip sync/music left as the
       honest manual steps they already were (no Google tool does either).
+- [x] **Instagram auto-reply.** The one deliberate exception to "Google tools only"
+      (ARCHITECTURE.md §18) — auto-replies to Instagram DMs a customer sends first, via Meta's
+      official Messaging API, never unsolicited outreach (which Meta's terms prohibit outright, on
+      or off their API). `modules/instagram` + `core/instagram/graph-api.ts`: a Facebook OAuth
+      connect flow (tamper-proof `state` via the existing AES-256-GCM encryption util, no cookie
+      dependency), a signature-verified webhook (`X-Hub-Signature-256`) that enqueues an
+      `instagram_reply` job per inbound DM, and a processor that drafts a reply with Gemini
+      (reusing the pooled Google Account Manager) and sends it through the Send API — opt-in and
+      off by default per connected account. Requires Meta App Review to reply to real customers in
+      production; that approval step happens in the Meta dashboard, outside this codebase.

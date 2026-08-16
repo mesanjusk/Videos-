@@ -12,6 +12,7 @@ const ALL_SCOPES: PromptScope[] = [
   "voice",
   "thumbnail",
   "music",
+  "instagram_reply",
 ];
 
 function defaultFor(scope: PromptScope): PromptTemplateDefinition {

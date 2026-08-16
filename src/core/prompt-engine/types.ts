@@ -6,7 +6,8 @@ export type PromptScope =
   | "scene_video"
   | "voice"
   | "thumbnail"
-  | "music";
+  | "music"
+  | "instagram_reply";
 
 /** A template string with `{{variable}}` placeholders, optionally including the shared consistency partial. */
 export interface PromptTemplateDefinition {
