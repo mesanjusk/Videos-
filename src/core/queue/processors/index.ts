@@ -10,8 +10,9 @@ import { processVoiceJob } from "./voice.processor";
 import { processLipSyncJob } from "./lipsync.processor";
 import { processRenderJob } from "./render.processor";
 import { processThumbnailJob } from "./thumbnail.processor";
+import { processInstagramReplyJob } from "./instagram-reply.processor";
 
-/** Every job type is now registered — this is the complete set from ARCHITECTURE.md §7/§11. */
+/** Every job type is now registered — this is the complete set from ARCHITECTURE.md §7/§11/§18. */
 export const processorRegistry: Partial<Record<JobType, (job: BullJob<BullJobData>) => Promise<unknown>>> = {
   story: processStoryJob,
   character_image: processCharacterImageJob,
@@ -22,4 +23,5 @@ export const processorRegistry: Partial<Record<JobType, (job: BullJob<BullJobDat
   lipsync: processLipSyncJob,
   render: processRenderJob,
   thumbnail: processThumbnailJob,
+  instagram_reply: processInstagramReplyJob,
 };

@@ -31,6 +31,14 @@ to run the job queue (Vercel's serverless tick vs. the standalone `worker.ts`).
 
 `npm run typecheck`, `npm run lint`, and `npm run build` are all clean against the current code.
 
+## Instagram auto-reply
+
+`/instagram` connects an Instagram professional account (via its linked Facebook Page) and
+auto-replies to DMs it receives, drafted by Gemini and sent through Meta's official Messaging API —
+never unsolicited outreach, which Meta's terms prohibit. See `ARCHITECTURE.md` §18 for the design
+and `.env.example`'s Instagram section for the Meta app setup this needs (including App Review
+before it can message real customers, done outside this codebase).
+
 ## Claude Code plugin
 
 `plugin/` drives this same 10-step pipeline from Claude Code instead of the browser UI — one Skill
