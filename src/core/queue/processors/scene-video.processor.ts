@@ -14,6 +14,10 @@ import type { VideoGenerationResult } from "@/core/ai/types";
 import { checkVideoDuration } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
+import { getFeatureFlags } from "@/core/config/flags";
+import { findAccountWithFlowSession } from "@/modules/accounts/service";
+import { enqueueJob } from "@/modules/jobs/service";
+import { ProductionProfile } from "@/modules/production-profiles/models/ProductionProfile";
 
 /**
  * Uploads a completed video result to Cloudinary, records it as an Asset, and flips the Scene to
@@ -124,6 +128,21 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
     });
 
     if (result.status === "manual_pending") {
+      // Browser fallback: before parking this on a human, see whether the same provider can be
+      // driven through its own website instead. This is the point of having a browser automation
+      // subsystem in a video studio at all — a provider with no API is not the same thing as a
+      // provider with no route.
+      //
+      // Enqueued rather than executed inline, deliberately: scene_video runs in the shared
+      // processor registry, which the Vercel serverless tick also uses, and nothing reachable from
+      // there may import Playwright. scene_video_auto is registered worker-only and already
+      // handles the browser run — including degrading to this same manual hand-off if the site
+      // fails, so the worst case is exactly today's behaviour, one queue hop later.
+      const diverted = await tryBrowserFallback(jobDoc.userId, jobDoc.projectId, scene._id.toString(), project.activeProfileId);
+      if (diverted) {
+        return { status: "completed", divertedTo: "scene_video_auto", jobId: diverted, characterReferenceImages };
+      }
+
       await fallBackToManualVideo(scene, result);
       return {
         status: "manual_pending",
@@ -136,4 +155,51 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
 
     return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId!.toString(), result, project.activeProfileId);
   });
+}
+
+/**
+ * Diverts a manual hand-off to browser automation, when everything needed is actually in place.
+ *
+ * Returns the enqueued job id, or null — and null is the normal, expected answer. Every condition
+ * below has to hold, and each is checked rather than assumed:
+ *
+ *  - the deployment enabled browser fallback (ENABLE_BROWSER_FALLBACK), or this production's
+ *    profile opted in. Off by default: diverting a job that would have waited for a person into one
+ *    that drives a browser is a behaviour change, and behaviour changes are opt-in.
+ *  - a Google account with a connected Flow browser session exists. Without one there is nothing
+ *    to sign in as, and the automation would only fail its way back to the manual hand-off.
+ *
+ * Never throws. A fallback that cannot be attempted must leave the scene exactly where it would
+ * have been anyway — waiting for a human — not fail the job.
+ */
+async function tryBrowserFallback(
+  userId: string,
+  projectId: unknown,
+  sceneId: string,
+  activeProfileId: unknown,
+): Promise<string | null> {
+  try {
+    let enabled = getFeatureFlags().browserFallback;
+    if (!enabled && activeProfileId) {
+      const profile = await ProductionProfile.findOne({ _id: activeProfileId, userId }).select("render.browserFallback").lean();
+      enabled = Boolean((profile?.render as { browserFallback?: boolean } | undefined)?.browserFallback);
+    }
+    if (!enabled) return null;
+
+    const account = await findAccountWithFlowSession(userId);
+    if (!account) return null;
+
+    const job = await enqueueJob({
+      userId,
+      projectId: projectId ? String(projectId) : undefined,
+      sceneId,
+      type: "scene_video_auto",
+      payload: { divertedFrom: "scene_video" },
+    });
+    console.log(`[video] no API route for scene ${sceneId} — diverted to browser automation as job ${job._id}`);
+    return job._id.toString();
+  } catch (err) {
+    console.error(`[video] browser fallback could not be attempted for scene ${sceneId}:`, err);
+    return null;
+  }
 }

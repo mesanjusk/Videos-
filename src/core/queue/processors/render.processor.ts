@@ -8,7 +8,18 @@ import { getRenderProvider } from "@/core/render";
 import { ProductionProfile } from "@/modules/production-profiles/models/ProductionProfile";
 import { uploadVideoAsset } from "@/core/storage/cloudinary";
 import { onRenderCompleted } from "@/core/queue/orchestrator";
-import { checkImageResolution, TARGET_FINAL_VIDEO } from "@/core/quality/checks";
+import {
+  checkImageResolution,
+  checkFileIntegrity,
+  checkVideoStream,
+  checkAudio,
+  checkFrameContent,
+  checkSceneOrdering,
+  TARGET_FINAL_VIDEO,
+} from "@/core/quality/checks";
+import { probeMedia, detectFrameAnomalies } from "@/core/quality/media-probe";
+import { decideRetry } from "@/core/quality/retry";
+import { QualityCheckFailedError } from "@/core/quality/errors";
 
 /** PDF Step 9 — Editing. Joins every scene with a generated video clip into the final export. */
 export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<ProcessorResult> {
@@ -67,6 +78,34 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       watermarkUrl: project.watermarkImageUrl ?? undefined,
     });
 
+    // Inspect the file before uploading it. Catching a black or silent render here means not
+    // paying to store it and not marking the project done around it — and the probe runs against
+    // the local file, which is the only point in the pipeline where that is cheap.
+    const [probe, anomalies] = await Promise.all([
+      probeMedia(compose.filePath),
+      detectFrameAnomalies(compose.filePath),
+    ]);
+
+    const scenesWithDialogue = scenes.filter((s) => s.dialogue?.trim()).length;
+    const mediaIssues = [
+      ...checkFileIntegrity(probe),
+      ...checkVideoStream(probe, { expectedFps: 30, fpsTolerance: 2, allowedVideoCodecs: ["h264"] }),
+      ...checkAudio(probe, { requireAudio: scenesWithDialogue > 0 }),
+      ...checkFrameContent(anomalies, probe.durationSeconds),
+      ...checkSceneOrdering(scenes.map((s) => s.index)),
+    ];
+
+    const retry = decideRetry(mediaIssues);
+    if (retry.stage) {
+      // Thrown the same way every other quality failure is, so it flows through withJobLifecycle
+      // into BullMQ's existing attempts/backoff — this is the established validation-triggered
+      // retry, not a second retry system. `retry.reason` records which stage actually owns the
+      // fault so the operator is not left re-running the whole production to find out.
+      await compose.cleanup();
+      console.error(`[quality] render for project ${jobDoc.projectId} failed: ${retry.reason}`);
+      throw new QualityCheckFailedError(retry.issues);
+    }
+
     try {
       const fileBuffer = await readFile(compose.filePath);
       const uploaded = await uploadVideoAsset(fileBuffer, {
@@ -95,7 +134,12 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       // resolution, so a mismatch here would mean a pipeline bug, not a re-runnable generation
       // issue — surfaced for visibility, never auto-retried (re-rendering is the most expensive
       // job type in the app).
-      const qualityIssues = checkImageResolution(uploaded, TARGET_FINAL_VIDEO).map((i) => ({ ...i, severity: "warning" as const }));
+      const qualityIssues = [
+        ...checkImageResolution(uploaded, TARGET_FINAL_VIDEO).map((i) => ({ ...i, severity: "warning" as const })),
+        // Media-level warnings survived the retry gate above — recorded and surfaced, never
+        // auto-retried, because re-rendering costs more than any of them do.
+        ...mediaIssues,
+      ];
       if (qualityIssues.length > 0) console.error(`[quality] final render for project ${jobDoc.projectId}:`, qualityIssues);
 
       // Anything the renderer declined to do is reported, never dropped silently — an overlay that
