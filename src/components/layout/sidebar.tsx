@@ -17,11 +17,14 @@ import {
   UserRound,
   Settings,
   SlidersHorizontal,
+  Sparkles,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/create", label: "Create Video", icon: Sparkles },
   { href: "/production-profiles", label: "Production Profiles", icon: Clapperboard },
   { href: "/production", label: "Pipeline Monitor", icon: Activity },
   { href: "/projects", label: "Projects", icon: FolderKanban },
@@ -31,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/voice-packs", label: "Voice Packs", icon: Mic2 },
   { href: "/queue", label: "Queue", icon: ListChecks },
   { href: "/browser-automation", label: "Browser Automation", icon: Bot },
+  { href: "/workflows", label: "Workflows", icon: Workflow },
   { href: "/instagram", label: "Instagram", icon: Instagram },
   { href: "/accounts", label: "Google Accounts", icon: UserRound },
   { href: "/prompts", label: "Prompt Library", icon: SlidersHorizontal },

@@ -32,3 +32,4 @@ import "@/modules/automation/models/HumanIntervention";
 import "@/modules/automation/models/Credential";
 import "@/modules/automation/models/StoredFile";
 import "@/modules/automation/models/AuditLog";
+import "@/modules/production-plans/models/ProductionPlan";
