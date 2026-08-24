@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUserId, UnauthorizedError } from "@/core/auth/session";
 import { upsertBrowserProviderConfigSchema } from "@/modules/browser-automation/schema";
 import { listBrowserProviderConfigs, upsertBrowserProviderConfig } from "@/modules/browser-automation/service";
-import { browserProviderRegistry } from "@/core/browser-automation/provider-adapter";
+import { browserProviderRegistry } from "@/core/browser/provider-adapter";
 
 export const dynamic = "force-dynamic";
 

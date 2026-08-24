@@ -51,8 +51,17 @@ function validateStep(step: TaskStep): { valid: boolean; reason?: string } {
   const needsSelector: TaskStep["action"][] = [
     "click", "double_click", "right_click", "hover", "input_text", "paste", "upload_file", "wait",
   ];
-  if (needsSelector.includes(step.action) && typeof step.params.selector !== "string") {
-    return { valid: false, reason: `Step ${step.id} (${step.action}) is missing a "selector" param` };
+  // A selector is now either a bare CSS string (as before) or a SelectorTarget object giving the
+  // resolver several ways to find the same element — see action-engine.ts. Both are accepted;
+  // an empty object is not, since it would resolve to nothing and fail confusingly later.
+  if (needsSelector.includes(step.action)) {
+    const selector = step.params.selector;
+    const usable =
+      (typeof selector === "string" && selector.length > 0) ||
+      (typeof selector === "object" && selector !== null && Object.values(selector).some((v) => v !== undefined));
+    if (!usable) {
+      return { valid: false, reason: `Step ${step.id} (${step.action}) is missing a usable "selector" param` };
+    }
   }
   return { valid: true };
 }

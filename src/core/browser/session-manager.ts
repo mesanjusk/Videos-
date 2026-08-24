@@ -3,7 +3,7 @@ import type { BrowserContext } from "playwright";
 /**
  * Persistence-agnostic — the framework never talks to Mongo directly (Clean Architecture /
  * Dependency Injection). Concrete implementations (e.g. `MongoSessionStore`) live in
- * `modules/browser-automation/`, injected in from outside `core/browser-automation/`.
+ * `modules/browser-automation/`, injected in from outside `core/browser/`.
  */
 export interface SessionStore {
   /** Returns the Playwright storageState() JSON, or null if no session is persisted. */

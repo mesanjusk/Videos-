@@ -1,5 +1,5 @@
-import type { TaskStep } from "@/core/browser-automation/types";
-import { FLOW_BASE_URL, FLOW_SELECTORS, FLOW_TIMEOUTS_MS } from "@/core/automation/selectors";
+import type { TaskStep } from "@/core/browser/types";
+import { FLOW_BASE_URL, FLOW_SELECTORS, FLOW_TIMEOUTS_MS } from "./selectors";
 
 export interface BuildGoogleFlowTaskInput {
   promptText: string;

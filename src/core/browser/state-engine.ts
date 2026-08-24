@@ -63,3 +63,20 @@ export class DefaultStateEngine implements StateEngine {
     return existing?.currentStepIndex ?? 0;
   }
 }
+
+/**
+ * Process-local state, for a run that does not need to survive a restart — `runBrowserTask()`'s
+ * default. The Mongo-backed store in `modules/browser-automation/` is what a resumable,
+ * dashboard-visible run uses instead.
+ */
+export class InMemoryStateStore implements StateStore {
+  private readonly states = new Map<string, { state: ExecutionState; currentStepIndex: number }>();
+
+  async load(runId: string) {
+    return this.states.get(runId) ?? null;
+  }
+
+  async save(runId: string, state: ExecutionState, currentStepIndex: number): Promise<void> {
+    this.states.set(runId, { state, currentStepIndex });
+  }
+}

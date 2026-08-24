@@ -128,7 +128,16 @@ export class DefaultTaskEngine implements TaskEngine {
       await browserManager.close();
       const message = err instanceof Error ? err.message : String(err);
       eventBus.emit({ runId, event: "ExecutionFinished", timestamp: new Date(), data: { error: message } });
-      return { taskId: runId, state: "failed", completedSteps: 0, totalSteps: task.steps.length, error: message, downloads, screenshots };
+      return {
+        taskId: runId,
+        state: "failed",
+        completedSteps: 0,
+        totalSteps: task.steps.length,
+        error: message,
+        failureStage: "setup",
+        downloads,
+        screenshots,
+      };
     }
 
     const applyRecovery = async (action: RecoveryAction, recoveryContext: RecoveryContext): Promise<Page> => {
@@ -208,7 +217,16 @@ export class DefaultTaskEngine implements TaskEngine {
     await browserManager.close();
     eventBus.emit({ runId, event: "ExecutionFinished", timestamp: new Date(), data: { state: finalState } });
 
-    return { taskId: runId, state: finalState, completedSteps, totalSteps: task.steps.length, error, downloads, screenshots };
+    return {
+      taskId: runId,
+      state: finalState,
+      completedSteps,
+      totalSteps: task.steps.length,
+      error,
+      failureStage: finalState === "failed" ? "step" : undefined,
+      downloads,
+      screenshots,
+    };
   }
 
   private async transition(runId: string, state: ExecutionState): Promise<void> {

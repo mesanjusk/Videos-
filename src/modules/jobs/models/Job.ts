@@ -6,9 +6,9 @@ export const JOB_TYPES = [
   "background_image",
   "scene_image",
   "scene_video",
-  // Browser-automation-backed video generation (Module 4) — a distinct job type/queue from
-  // scene_video specifically so its processor (which imports Playwright) can be registered only in
-  // worker.ts's worker-only registry, never the shared one the Vercel serverless tick route uses.
+  // Browser-automation-backed video generation — a distinct job type/queue from scene_video
+  // specifically so its processor (which imports Playwright) can be registered only in worker.ts's
+  // worker-only registry, never the shared one the Vercel serverless tick route uses.
   // See core/queue/worker-only-processors.ts.
   "scene_video_auto",
   "voice",
@@ -16,7 +16,7 @@ export const JOB_TYPES = [
   "render",
   "thumbnail",
   // Generic browser-automation execution (Module 7A) — like scene_video_auto, imports Playwright
-  // transitively (via core/browser-automation/) and is registered only in worker-only-processors.ts.
+  // transitively (via core/browser/) and is registered only in worker-only-processors.ts.
   // Unlike every other job type, it's not always scene/project-bound (see projectId below).
   "browser_task",
   // Instagram auto-reply (ARCHITECTURE.md §18) — a fast API-only job (Gemini + Meta Graph API, no

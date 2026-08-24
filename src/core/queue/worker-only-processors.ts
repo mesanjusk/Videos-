@@ -7,7 +7,7 @@ import { processBrowserTaskJob } from "./processors/browser-task.processor";
 /**
  * Job types that must NEVER be registered in core/queue/processors/index.ts (the shared registry
  * both worker.ts and the Vercel-serverless `/api/queue/tick` route consume). Everything here
- * transitively imports Playwright — see core/automation/ and
+ * transitively imports Playwright — see core/browser/ and
  * core/ai/providers/google/google-flow-automated.ts — which has no business inside a Vercel
  * serverless function (no guaranteed browser binary, unsuited execution time limits, bundle size).
  *

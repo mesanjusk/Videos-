@@ -1,4 +1,4 @@
-import { browserProviderRegistry } from "@/core/browser-automation/provider-adapter";
+import { browserProviderRegistry } from "@/core/browser/provider-adapter";
 import { GoogleFlowProviderAdapter } from "./adapter";
 
 let registered = false;

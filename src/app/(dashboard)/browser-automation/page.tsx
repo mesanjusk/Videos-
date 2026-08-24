@@ -1,6 +1,6 @@
 import { requireUserId } from "@/core/auth/session";
 import { listBrowserTaskRuns, listBrowserSessions, listBrowserProviderConfigs } from "@/modules/browser-automation/service";
-import { browserProviderRegistry } from "@/core/browser-automation/provider-adapter";
+import { browserProviderRegistry } from "@/core/browser/provider-adapter";
 import { HelpButton } from "@/components/shared/help-button";
 import {
   BrowserAutomationManager,
@@ -9,7 +9,7 @@ import {
   type BrowserTaskRunItem,
   type RegisteredProviderItem,
 } from "./browser-automation-manager";
-import type { BrowserTask } from "@/core/browser-automation/types";
+import type { BrowserTask } from "@/core/browser/types";
 
 export default async function BrowserAutomationPage() {
   const userId = await requireUserId();

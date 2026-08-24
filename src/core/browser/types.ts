@@ -60,12 +60,30 @@ export type ExecutionState =
   | "failed"
   | "cancelled";
 
+/**
+ * Where a failed run gave out.
+ *
+ * "setup" means the browser or the page never got as far as executing a step — a launch failure, a
+ * missing Chromium, an unusable session. Those are infrastructure problems: the right response is
+ * to let the job fail so the queue retries it later.
+ *
+ * "step" means the automation reached the site and an interaction went wrong — a changed selector,
+ * a verification challenge, a render that never finished. Retrying that immediately just repeats
+ * it; the right response is to degrade to whatever manual path the caller has.
+ *
+ * Collapsing the two (which the framework did before the merge, reporting only `state: "failed"`)
+ * meant a caller had to guess from the error text. `core/ai/providers/google/google-flow-automated.ts`
+ * needs exactly this distinction to preserve the behaviour Module 4's circuit breaker had.
+ */
+export type FailureStage = "setup" | "step";
+
 export interface TaskResult {
   taskId: string;
   state: ExecutionState;
   completedSteps: number;
   totalSteps: number;
   error?: string;
+  failureStage?: FailureStage;
   downloads: { path: string; url?: string }[];
   screenshots: string[];
 }

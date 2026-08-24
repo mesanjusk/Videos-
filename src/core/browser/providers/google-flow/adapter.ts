@@ -2,11 +2,11 @@ import { writeFile, mkdtemp, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright";
-import type { ProviderAdapter } from "@/core/browser-automation/provider-adapter";
-import type { ActionEngine } from "@/core/browser-automation/action-engine";
-import type { BrowserTask, TaskStep } from "@/core/browser-automation/types";
-import type { RecoveryAction, RecoveryContext } from "@/core/browser-automation/recovery-engine";
-import { FLOW_TIMEOUTS_MS } from "@/core/automation/selectors";
+import type { ProviderAdapter } from "@/core/browser/provider-adapter";
+import type { ActionEngine } from "@/core/browser/action-engine";
+import type { BrowserTask, TaskStep } from "@/core/browser/types";
+import type { RecoveryAction, RecoveryContext } from "@/core/browser/recovery-engine";
+import { FLOW_TIMEOUTS_MS } from "./selectors";
 
 interface FlowTaskMetadata {
   promptText: string;
