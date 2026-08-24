@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveTarget } from "./resolver";
 import type { Page } from "playwright";
 
-function fakeLocator(succeeds: boolean) {
-  const locator: any = {
+interface FakeLocator {
+  first(): FakeLocator;
+  nth(index: number): FakeLocator;
+  waitFor(options?: unknown): Promise<void>;
+}
+
+function fakeLocator(succeeds: boolean): FakeLocator {
+  const locator: FakeLocator = {
     first: () => locator,
     nth: () => locator,
     waitFor: vi.fn(async () => {
