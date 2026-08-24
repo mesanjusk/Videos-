@@ -4,7 +4,8 @@ import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./help
 import { Project } from "@/modules/projects/models/Project";
 import { Scene } from "@/modules/scenes/models/Scene";
 import { Asset } from "@/modules/assets/models/Asset";
-import { composeVideo } from "@/core/ffmpeg/compose";
+import { getRenderProvider } from "@/core/render";
+import { ProductionProfile } from "@/modules/production-profiles/models/ProductionProfile";
 import { uploadVideoAsset } from "@/core/storage/cloudinary";
 import { onRenderCompleted } from "@/core/queue/orchestrator";
 import { checkImageResolution, TARGET_FINAL_VIDEO } from "@/core/quality/checks";
@@ -36,7 +37,15 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
     project.status = "rendering";
     await project.save();
 
-    const compose = await composeVideo({
+    // Which renderer this production wants. Defaults to FFmpeg — the renderer every project has
+    // always used — and degrades back to it if the requested one is unavailable, so an existing
+    // project's render is byte-for-byte the same path it was before the merge.
+    const profile = project.activeProfileId
+      ? await ProductionProfile.findOne({ _id: project.activeProfileId, userId: jobDoc.userId }).select("render.renderer").lean()
+      : null;
+    const renderer = getRenderProvider((profile?.render as { renderer?: string } | undefined)?.renderer);
+
+    const compose = await renderer.render({
       scenes: renderable.map((s) => {
         // Prefer the lip-synced clip when one exists — its own audio track already has the
         // narration baked in, so the separate voice track (if any) is intentionally left unused.
@@ -89,7 +98,17 @@ export async function processRenderJob(bullJob: BullJob<BullJobData>): Promise<P
       const qualityIssues = checkImageResolution(uploaded, TARGET_FINAL_VIDEO).map((i) => ({ ...i, severity: "warning" as const }));
       if (qualityIssues.length > 0) console.error(`[quality] final render for project ${jobDoc.projectId}:`, qualityIssues);
 
-      return { assetId: asset._id.toString(), durationSeconds: compose.durationSeconds, qualityIssues };
+      // Anything the renderer declined to do is reported, never dropped silently — an overlay that
+      // did not composite is something the operator needs to know about even though the video is fine.
+      if (compose.warnings.length > 0) console.warn(`[render] project ${jobDoc.projectId}:`, compose.warnings);
+
+      return {
+        assetId: asset._id.toString(),
+        durationSeconds: compose.durationSeconds,
+        renderer: compose.renderer,
+        renderWarnings: compose.warnings,
+        qualityIssues,
+      };
     } finally {
       await compose.cleanup();
     }

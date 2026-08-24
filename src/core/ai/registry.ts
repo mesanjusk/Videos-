@@ -12,6 +12,10 @@ import { GeminiImageProvider } from "./providers/google/gemini-image";
 import { GeminiVoiceProvider } from "./providers/google/gemini-voice";
 import { GoogleFlowVideoProvider } from "./providers/google/google-flow-video";
 import { ManualLipSyncProvider } from "./providers/manual/manual-lipsync";
+import { VoiceboxProvider } from "./providers/voicebox/voicebox-voice";
+import { IdeogramImageProvider } from "./providers/ideogram/ideogram-image";
+import { LocalImageProvider } from "./providers/local/local-image";
+import { listProviderMetadata, isProviderConfigured } from "./provider-metadata";
 
 /**
  * The one and only place that knows concrete provider classes exist.
@@ -26,6 +30,11 @@ const storyProviders: Record<string, StoryProvider> = {
 
 const imageProviders: Record<string, ImageProvider> = {
   gemini: new GeminiImageProvider(),
+  // Added by the merge. Both report themselves unavailable unless their flag is on and their
+  // configuration is present, so registering them here changes nothing for a deployment that has
+  // not opted in — see `assertUsable` below, which is what actually gates selection.
+  ideogram: new IdeogramImageProvider(),
+  "local-image": new LocalImageProvider(),
 };
 
 const videoProviders: Record<string, VideoProvider> = {
@@ -34,6 +43,7 @@ const videoProviders: Record<string, VideoProvider> = {
 
 const voiceProviders: Record<string, VoiceProvider> = {
   gemini: new GeminiVoiceProvider(),
+  voicebox: new VoiceboxProvider(),
 };
 
 const lipSyncProviders: Record<string, LipSyncProvider> = {
@@ -54,10 +64,46 @@ export const FUTURE_PROVIDERS: ProviderDescriptor[] = [
   { id: "runway", label: "Runway", capability: "video", enabled: false },
   { id: "kling", label: "Kling", capability: "video", enabled: false },
   { id: "veo-vertex", label: "Veo (Vertex AI)", capability: "video", enabled: false },
-  { id: "local", label: "Local model", capability: "image", enabled: false },
   { id: "hedra", label: "Hedra", capability: "lipsync", enabled: false },
   { id: "heygen", label: "HeyGen", capability: "lipsync", enabled: false },
 ];
+
+/**
+ * Providers added by the merge carry an `isAvailable()` of their own: a flag that is off, or a
+ * missing URL or key, must make the provider unusable rather than make it throw halfway through a
+ * job with a confusing message. This is the one place that check is enforced, so every getter
+ * below gets it without repeating it.
+ */
+interface MaybeAvailable {
+  isAvailable?: () => boolean;
+}
+
+function assertUsable<T extends { id: string; label: string }>(provider: T, capability: AiCapability): T {
+  const check = (provider as T & MaybeAvailable).isAvailable;
+  if (check && !check.call(provider)) {
+    const descriptor = listProviderMetadata(capability).find((p) => p.id === provider.id);
+    const missing = descriptor ? descriptor.requirements.filter((key) => !process.env[key]) : [];
+    throw new Error(
+      `Provider "${provider.id}" is not available for ${capability}. ` +
+        (missing.length ? `Missing configuration: ${missing.join(", ")}. ` : "") +
+        (descriptor?.flag ? `Check that its feature flag is enabled. ` : "") +
+        `Choose a different ${capability} provider, or configure this one.`,
+    );
+  }
+  return provider;
+}
+
+/** Providers that are registered, flagged on, and configured — what Settings should offer. */
+export function listAvailableProviders(): ProviderDescriptor[] {
+  return listProviderMetadata()
+    .filter((descriptor) => isProviderConfigured(descriptor))
+    .map((descriptor) => ({
+      id: descriptor.id,
+      label: descriptor.label,
+      capability: descriptor.capability as AiCapability,
+      enabled: true,
+    }));
+}
 
 function envDefault(capability: AiCapability): string {
   switch (capability) {
@@ -78,35 +124,35 @@ export function getStoryProvider(providerId?: string): StoryProvider {
   const id = providerId ?? envDefault("story");
   const provider = storyProviders[id];
   if (!provider) throw new Error(`Unknown story provider "${id}"`);
-  return provider;
+  return assertUsable(provider, "story");
 }
 
 export function getImageProvider(providerId?: string): ImageProvider {
   const id = providerId ?? envDefault("image");
   const provider = imageProviders[id];
   if (!provider) throw new Error(`Unknown image provider "${id}"`);
-  return provider;
+  return assertUsable(provider, "image");
 }
 
 export function getVideoProvider(providerId?: string): VideoProvider {
   const id = providerId ?? envDefault("video");
   const provider = videoProviders[id];
   if (!provider) throw new Error(`Unknown video provider "${id}"`);
-  return provider;
+  return assertUsable(provider, "video");
 }
 
 export function getVoiceProvider(providerId?: string): VoiceProvider {
   const id = providerId ?? envDefault("voice");
   const provider = voiceProviders[id];
   if (!provider) throw new Error(`Unknown voice provider "${id}"`);
-  return provider;
+  return assertUsable(provider, "voice");
 }
 
 export function getLipSyncProvider(providerId?: string): LipSyncProvider {
   const id = providerId ?? envDefault("lipsync");
   const provider = lipSyncProviders[id];
   if (!provider) throw new Error(`Unknown lip-sync provider "${id}"`);
-  return provider;
+  return assertUsable(provider, "lipsync");
 }
 
 export function listEnabledProviders(): ProviderDescriptor[] {

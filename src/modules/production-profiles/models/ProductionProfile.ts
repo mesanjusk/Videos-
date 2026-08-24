@@ -49,6 +49,15 @@ const productionProfileSchema = new Schema(
       retryStrategy: { type: String, enum: ["none", "quality-triggered", "aggressive"], default: "quality-triggered" },
     },
     render: {
+      // Which RenderProvider composes the final video (core/render). "ffmpeg" is the default and
+      // the fallback; "hybrid" adds HyperFrames-composed HTML overlays on top of the same FFmpeg
+      // composition. FFmpeg is never replaced — see docs/RENDERING.md.
+      renderer: { type: String, enum: ["ffmpeg", "hyperframes", "hybrid"], default: "ffmpeg" },
+      // Cost policy in force for productions started from this profile. "BALANCED" preserves the
+      // behaviour every existing profile already has; "ZERO_COST" refuses any metered provider.
+      costPolicy: { type: String, enum: ["ZERO_COST", "FREE_PREFERRED", "BALANCED", "BEST_QUALITY"], default: "BALANCED" },
+      // Let a video stage divert to browser automation when no API route is available.
+      browserFallback: { type: Boolean, default: false },
       oneSceneAtATime: { type: Boolean, default: true },
       maxParallelJobs: { type: Number, default: 2 },
       // Same shape as Settings.providerOverrides (core/ai/types.ts's AiCapability keys) —
