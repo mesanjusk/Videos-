@@ -23,6 +23,22 @@ export const JOB_TYPES = [
   // Playwright), registered in the shared processorRegistry like voice/thumbnail. Not scene/project
   // -bound; see projectId below.
   "instagram_reply",
+
+  // ── Added by the Browser Automation OS merge ──────────────────────────────────────────────
+  // Runs one AutomationTask through the workflow engine. Playwright-backed, so worker-only.
+  // Note its BullMQ attempts are 1, not 3 (see core/queue/queues.ts): the workflow engine retries
+  // per node, and a second layer of whole-job retries would re-run steps that already succeeded.
+  "automation_workflow",
+  // Delivers one outbound webhook. HTTP only — safe in the shared registry.
+  "automation_webhook",
+  // Storage/DB sweep for expired screenshots and stale run evidence. HTTP/DB only.
+  "system_cleanup",
+
+  // ── Added by the Production Director ──────────────────────────────────────────────────────
+  // Turns a one-line request into a ProductionPlan. LLM only, no Playwright — shared registry.
+  "production_plan",
+  // Research + fact-check pass for a planned production. LLM/HTTP only — shared registry.
+  "production_research",
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
@@ -52,6 +68,26 @@ const jobSchema = new Schema(
     progress: { type: Number, default: 0, min: 0, max: 100 },
     logs: [{ type: String }],
     bullJobId: { type: String, index: true }, // correlates to the BullMQ job id in Redis
+
+    // ── Observability (added by the merge) ──────────────────────────────────────────────────
+    // All optional, so every document written before this existed is still valid. Together these
+    // are what makes "why did this run cost what it cost, and which provider actually served it"
+    // answerable after the fact — neither source project could answer either question.
+    /** Shared by every job in one production run, so a whole pipeline can be traced as a unit. */
+    correlationId: { type: String, index: true },
+    /** The job that enqueued this one — the Director's plan job is the parent of its stage jobs. */
+    parentJobId: { type: Schema.Types.ObjectId, ref: "Job" },
+    /** Which provider and model actually served the work, after gateway routing and any fallback. */
+    provider: { type: String },
+    model: { type: String },
+    /** The cost policy in force for this job — see core/cost. */
+    costPolicy: { type: String },
+    /** Pre-flight estimate, and what it actually cost when the provider reports it. Both in USD. */
+    estimatedCost: { type: Number },
+    actualCost: { type: Number },
+    startedAt: { type: Date },
+    completedAt: { type: Date },
+    durationMs: { type: Number },
   },
   { timestamps: true },
 );

@@ -21,3 +21,15 @@ export function getRedisConnection(): IORedis {
   }
   return global._redisConnection;
 }
+
+/**
+ * Closes the shared connection. Ported from Browser Automation OS — the studio never had one,
+ * which meant `worker.ts` could not shut down cleanly (the process hung on an open Redis socket
+ * until it was killed) and tests could not release it. Only the worker's shutdown path and tests
+ * should call this; the serverless runtime deliberately keeps its connection across invocations.
+ */
+export async function closeRedisConnection(): Promise<void> {
+  if (!global._redisConnection) return;
+  await global._redisConnection.quit();
+  global._redisConnection = undefined;
+}
