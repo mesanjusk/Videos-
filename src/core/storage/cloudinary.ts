@@ -94,3 +94,13 @@ export function getSignedUploadParams(folder: string) {
   const signature = cloudinary.utils.api_sign_request({ timestamp, folder }, process.env.CLOUDINARY_API_SECRET!);
   return { timestamp, folder, signature, apiKey: process.env.CLOUDINARY_API_KEY, cloudName: process.env.CLOUDINARY_CLOUD_NAME };
 }
+
+/**
+ * Removes an asset from Cloudinary. Added for the merged storage abstraction's `delete()` and for
+ * the cleanup policies described in docs/DEPLOYMENT.md — nothing in the original studio ever
+ * deleted a remote asset, so intermediate uploads accumulated indefinitely.
+ */
+export async function deleteAsset(publicId: string, resourceType: "image" | "video" | "raw"): Promise<void> {
+  ensureConfigured();
+  await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, invalidate: true });
+}

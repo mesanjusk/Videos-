@@ -31,3 +31,6 @@ logs/
 
 # ffmpeg scratch
 /tmp-render/
+
+# local storage provider output (core/storage/local.ts)
+/storage/
