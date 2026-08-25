@@ -34,5 +34,6 @@ export * from "./action-engine";
 export * from "./selectors/resolver";
 export * from "./interpolate";
 export * from "./page-snapshot";
+export * from "./launch";
 export * from "./session";
 export * from "./actions";

@@ -1,5 +1,6 @@
 import type { Browser } from "playwright";
 import type { BrowserAutomationEventBus } from "./event-bus";
+import { launchChromium } from "./launch";
 
 export interface BrowserManagerOptions {
   headless?: boolean;
@@ -30,8 +31,8 @@ export class PlaywrightBrowserManager implements BrowserManager {
 
   async launch(options: BrowserManagerOptions = {}): Promise<void> {
     this.lastOptions = options;
-    const { chromium } = await import("playwright");
-    this.browser = await chromium.launch({ headless: options.headless ?? true });
+    // Launch options come from ./launch so this and BrowserSession cannot disagree about headless.
+    this.browser = await launchChromium({ headless: options.headless });
     this.eventBus.emit({ runId: this.runId, event: "BrowserStarted", timestamp: new Date() });
   }
 

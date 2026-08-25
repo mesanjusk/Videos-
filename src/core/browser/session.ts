@@ -1,4 +1,5 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { type Browser, type BrowserContext, type Page } from "playwright";
+import { launchChromium } from "./launch";
 
 export interface ProfileOptions {
   userAgent?: string;
@@ -12,9 +13,7 @@ let sharedBrowser: Browser | null = null;
 
 async function getSharedBrowser(): Promise<Browser> {
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
-    sharedBrowser = await chromium.launch({
-      headless: process.env.PLAYWRIGHT_HEADLESS !== "false",
-    });
+    sharedBrowser = await launchChromium();
   }
   return sharedBrowser;
 }
