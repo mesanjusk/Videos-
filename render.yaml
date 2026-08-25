@@ -36,10 +36,14 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      # Must be byte-identical to the app's. The worker decrypts what the app encrypted —
+      # a different key here means every stored credential and browser session fails to read.
       - key: ENCRYPTION_KEY
         sync: false
-      - key: NEXTAUTH_SECRET
-        sync: false
+
+      # NEXTAUTH_SECRET, GOOGLE_CLIENT_*, CRON_SECRET and INSTAGRAM_* are deliberately absent:
+      # nothing reachable from worker.ts reads them. The worker has no HTTP surface beyond /health
+      # and never authenticates a user.
 
       # The worker uploads generated assets, so it needs the same storage configuration the app has.
       - key: STORAGE_PROVIDER
@@ -60,6 +64,24 @@ services:
 
       - key: DEFAULT_COST_POLICY
         value: BALANCED
+
+      # Feature flags must MATCH the app's. They decide which providers exist, and the app is what
+      # shows a user their options while the worker is what actually runs them — a mismatch means
+      # the UI offers a provider the worker will refuse, or hides one it would happily use.
+      - key: ENABLE_ZERO_COST_MODE
+        value: "true"
+      - key: ENABLE_OMNIROUTE
+        value: "false"
+      - key: ENABLE_VOICEBOX
+        value: "false"
+      - key: ENABLE_HYPERFRAMES
+        value: "false"
+      - key: ENABLE_IDEOGRAM
+        value: "false"
+      - key: ENABLE_LOCAL_AI
+        value: "false"
+      - key: ENABLE_BROWSER_FALLBACK
+        value: "false"
       - key: WORKER_CONCURRENCY
         value: "2"
       - key: PLAYWRIGHT_HEADLESS
