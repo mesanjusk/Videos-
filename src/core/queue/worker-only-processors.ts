@@ -3,11 +3,12 @@ import type { JobType } from "@/modules/jobs/models/Job";
 import type { BullJobData } from "./processors/helpers";
 import { processSceneVideoAutoJob } from "./processors/scene-video-auto.processor";
 import { processBrowserTaskJob } from "./processors/browser-task.processor";
+import { processAutomationWorkflowJob } from "./processors/automation-workflow.processor";
 
 /**
  * Job types that must NEVER be registered in core/queue/processors/index.ts (the shared registry
  * both worker.ts and the Vercel-serverless `/api/queue/tick` route consume). Everything here
- * transitively imports Playwright — see core/automation/ and
+ * transitively imports Playwright — see core/browser/ and
  * core/ai/providers/google/google-flow-automated.ts — which has no business inside a Vercel
  * serverless function (no guaranteed browser binary, unsuited execution time limits, bundle size).
  *
@@ -19,4 +20,5 @@ import { processBrowserTaskJob } from "./processors/browser-task.processor";
 export const workerOnlyProcessorRegistry: Partial<Record<JobType, (job: BullJob<BullJobData>) => Promise<unknown>>> = {
   scene_video_auto: processSceneVideoAutoJob,
   browser_task: processBrowserTaskJob,
+  automation_workflow: processAutomationWorkflowJob,
 };

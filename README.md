@@ -1,7 +1,12 @@
-# AI Video Studio
+# AI Production OS
 
-Turns an idea into a finished cartoon video — story, characters, backgrounds, scenes, video, voice,
-editing, thumbnail — guided end to end, with no prompt-writing required from the user.
+Turns an idea into a finished video — research, script, characters, backgrounds, scenes, video,
+voice, editing, thumbnail — guided end to end, with no prompt-writing required from the user. And,
+where a provider has no API, drives its website through browser automation instead of stopping.
+
+Formed by merging two projects: the AI Video Studio (this repo) and Browser Automation OS. See
+[`docs/MERGE-AUDIT.md`](docs/MERGE-AUDIT.md) for what each contributed and
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the merged shape.
 
 Workflow logic follows `COMPLETE_AI_CARTOON_WORKFLOW_2026.pdf`; implementation technology follows the
 approved stack (see `ARCHITECTURE.md` for the full rationale, especially why video generation is
@@ -20,16 +25,39 @@ Library, and Settings.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in MongoDB Atlas, Cloudinary, Upstash Redis, Google OAuth
-npm run dev
+cp .env.example .env.local          # fill in NEXTAUTH_SECRET, ENCRYPTION_KEY, GEMINI_API_KEY
+npm run infra:up                    # MongoDB + Redis in Docker
+npm run dev:all                     # app on :3000, worker on :4000
 ```
+
+Nothing about local development requires Vercel, Render or Cloudinary. With `STORAGE_PROVIDER=local`
+and a local LLM and image worker, it needs no external service at all — see
+[`docs/ZERO-COST-MODE.md`](docs/ZERO-COST-MODE.md).
+
+`npm run verify` runs typecheck, lint and the test suite.
 
 Then sign in and connect at least one Google account at `/accounts` (OAuth-confirm identity, then
 paste a free Gemini API key from [AI Studio](https://aistudio.google.com/app/apikey)) — nothing
 generates without one. See `docs/deployment.md` for the full production setup, including the two ways
 to run the job queue (Vercel's serverless tick vs. the standalone `worker.ts`).
 
-`npm run typecheck`, `npm run lint`, and `npm run build` are all clean against the current code.
+`npm run typecheck`, `npm run lint`, `npm test` and `npm run build` are all clean against the
+current code.
+
+## Create Video
+
+`/create` takes one line — "Create a 60-second Hindi Instagram Reel explaining the logic behind
+Sehra in Indian weddings" — and returns a plan: research questions, script beats, storyboard,
+characters, assets, voice, rendering and quality requirements. Nothing is generated and nothing is
+spent until you approve it. See [`docs/VIDEO-PIPELINE.md`](docs/VIDEO-PIPELINE.md).
+
+## Cost policy
+
+Every run has one: `ZERO_COST`, `FREE_PREFERRED`, `BALANCED` (the default) or `BEST_QUALITY`. Under
+`ZERO_COST` the system refuses to run rather than falling back to a paid provider, and a provider
+whose pricing cannot be verified counts as paid. See
+[`docs/ZERO-COST-MODE.md`](docs/ZERO-COST-MODE.md) and
+[`docs/PROVIDER-MATRIX.md`](docs/PROVIDER-MATRIX.md).
 
 ## Instagram auto-reply
 

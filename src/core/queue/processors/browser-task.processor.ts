@@ -1,21 +1,21 @@
 import type { Job as BullJob } from "bullmq";
 import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./helpers";
-import { InMemoryEventBus } from "@/core/browser-automation/event-bus";
-import { PlaywrightBrowserManager } from "@/core/browser-automation/browser-manager";
-import { DefaultTabManager } from "@/core/browser-automation/tab-manager";
-import { DefaultSessionManager } from "@/core/browser-automation/session-manager";
-import { PlaywrightActionEngine } from "@/core/browser-automation/action-engine";
-import { DefaultStateEngine } from "@/core/browser-automation/state-engine";
-import { DefaultRecoveryEngine } from "@/core/browser-automation/recovery-engine";
-import { EventBusExecutionMonitor } from "@/core/browser-automation/execution-monitor";
-import { browserProviderRegistry } from "@/core/browser-automation/provider-adapter";
-import { DefaultTaskEngine } from "@/core/browser-automation/task-engine";
+import { InMemoryEventBus } from "@/core/browser/event-bus";
+import { PlaywrightBrowserManager } from "@/core/browser/browser-manager";
+import { DefaultTabManager } from "@/core/browser/tab-manager";
+import { DefaultSessionManager } from "@/core/browser/session-manager";
+import { PlaywrightActionEngine } from "@/core/browser/action-engine";
+import { DefaultStateEngine } from "@/core/browser/state-engine";
+import { DefaultRecoveryEngine } from "@/core/browser/recovery-engine";
+import { EventBusExecutionMonitor } from "@/core/browser/execution-monitor";
+import { browserProviderRegistry } from "@/core/browser/provider-adapter";
+import { DefaultTaskEngine } from "@/core/browser/task-engine";
 import { MongoSessionStore, MongoStateStore, MongoTaskStore, PersistingExecutionMonitor } from "@/modules/browser-automation/service";
 import { BrowserTaskRun } from "@/modules/browser-automation/models/BrowserTaskRun";
 
 /**
  * The `browser_task` job type's processor — deliberately the only file (besides
- * `core/browser-automation/*` itself) that imports the framework, and registered only in
+ * `core/browser/*` itself) that imports the framework, and registered only in
  * `core/queue/worker-only-processors.ts` (same Playwright-isolation rule as Module 4's
  * `scene_video_auto`). Composes the framework's DI-friendly pieces with their Mongo-backed
  * implementations; contains no provider-specific logic itself.
@@ -41,7 +41,7 @@ export async function processBrowserTaskJob(bullJob: BullJob<BullJobData>): Prom
       createBrowserManager: (id) => new PlaywrightBrowserManager(id, eventBus),
       createTabManager: () => new DefaultTabManager(),
       taskStore,
-      executionMonitor: new PersistingExecutionMonitor(new EventBusExecutionMonitor(eventBus)),
+      executionMonitor: new PersistingExecutionMonitor(new EventBusExecutionMonitor(eventBus), jobDoc.userId),
     });
 
     // Cross-process cooperative cancel/pause: the API route that set BrowserTaskRun's flags runs on

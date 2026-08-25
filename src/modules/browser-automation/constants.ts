@@ -4,7 +4,7 @@
  * client" component transitively importing a Mongoose model file bloated a route to 327kB. Never
  * add an import here.
  *
- * These mirror `ExecutionState` from `core/browser-automation/types.ts` but are their own runtime
+ * These mirror `ExecutionState` from `core/browser/types.ts` but are their own runtime
  * source of truth for persistence — the framework core stays Mongoose-free, so it cannot export a
  * runtime array for this file to import.
  */

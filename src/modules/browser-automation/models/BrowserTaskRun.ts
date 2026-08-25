@@ -3,7 +3,7 @@ import { BROWSER_TASK_RUN_STATES } from "../constants";
 
 /**
  * One document per TaskEngine execution. `taskDefinition` stores the serializable `BrowserTask`
- * verbatim (core/browser-automation/types.ts's `BrowserTask` is plain JSON by design) so a run can
+ * verbatim (core/browser/types.ts's `BrowserTask` is plain JSON by design) so a run can
  * be reloaded and resumed via `TaskEngine.resume(runId)` after a process restart — this collection
  * is exactly what a `TaskStore` + `StateStore` implementation reads/writes.
  */

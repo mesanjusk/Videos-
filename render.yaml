@@ -1,0 +1,81 @@
+# Render Blueprint for the worker process.
+#
+# The Next.js app is deployed on Vercel (see vercel.json and docs/DEPLOYMENT.md). This deploys the
+# other half: the always-on worker that runs everything a serverless function must not — Playwright,
+# FFmpeg, HyperFrames, long renders, and the schedule sweeper.
+#
+# Unlike the monorepo this worker's ancestors lived in, the merged application is a single npm
+# package, so Render's native Node runtime works directly and there is no Dockerfile to maintain.
+# The one thing the buildpack does not give you is Chromium, which the build command installs.
+#
+# Usage: Render dashboard → New → Blueprint → point at this repo/branch, then fill in the
+# `sync: false` variables. They are the same values the Vercel project uses, with two exceptions
+# noted below.
+
+services:
+  - type: web
+    name: ai-production-os-worker
+    runtime: node
+    plan: starter
+    healthCheckPath: /health
+    # `npm ci` rather than `npm install`: it installs exactly what the lockfile says and wipes
+    # node_modules first, which defeats the stale-cache failure where a restored cache reports
+    # "up to date" and silently skips a newly added dependency.
+    buildCommand: npm ci && npx playwright install --with-deps chromium
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+
+      # Chromium is installed above, so the skip flag must NOT be set here. It belongs on Vercel
+      # only, where no Playwright code is reachable from a route.
+
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+
+      # The worker uploads generated assets, so it needs the same storage configuration the app has.
+      - key: STORAGE_PROVIDER
+        value: cloudinary
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Where the worker reaches the app, for local-storage asset URLs. Not the worker's own URL.
+      - key: APP_BASE_URL
+        sync: false
+
+      - key: DEFAULT_COST_POLICY
+        value: BALANCED
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: PLAYWRIGHT_HEADLESS
+        value: "true"
+      - key: MAX_AI_ACTIONS
+        value: "100"
+      # Set this in production. Empty means the AI agent may navigate anywhere.
+      - key: AI_ALLOWED_DOMAINS
+        sync: false
+
+# ── A note on the free plan ───────────────────────────────────────────────────────────────────
+# `plan: starter` is deliberate. Render's free web services spin down after ~15 minutes without
+# HTTP traffic, and a worker whose whole job is to consume queued jobs while nobody is looking is
+# the worst possible fit for that: a job enqueued while it sleeps sits in Redis until something
+# wakes it. Pinging /health on a schedule papers over it but still leaves gaps between pings.
+#
+# If you must use the free plan, .github/workflows/keep-worker-warm.yml pings /health every ten
+# minutes; set the WORKER_HEALTH_URL repo secret and enable the workflow. Treat it as a testing
+# arrangement, not a production one.

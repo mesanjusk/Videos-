@@ -6,11 +6,11 @@ import { BrowserTaskRun } from "./models/BrowserTaskRun";
 import { BrowserExecutionLog } from "./models/BrowserExecutionLog";
 import { BrowserProviderConfig } from "./models/BrowserProviderConfig";
 import type { CreateBrowserSessionInput, ExecuteBrowserTaskInput, UpsertBrowserProviderConfigInput } from "./schema";
-import type { SessionStore } from "@/core/browser-automation/session-manager";
-import type { StateStore } from "@/core/browser-automation/state-engine";
-import type { TaskStore } from "@/core/browser-automation/task-engine";
-import type { ExecutionMonitor } from "@/core/browser-automation/execution-monitor";
-import type { BrowserTask, ExecutionState } from "@/core/browser-automation/types";
+import type { SessionStore } from "@/core/browser/session-manager";
+import type { StateStore } from "@/core/browser/state-engine";
+import type { TaskStore } from "@/core/browser/task-engine";
+import type { ExecutionMonitor } from "@/core/browser/execution-monitor";
+import type { BrowserTask, ExecutionState } from "@/core/browser/types";
 
 // ---- Sessions ----------------------------------------------------------
 
@@ -33,7 +33,7 @@ export async function deleteBrowserSession(userId: string, id: string) {
   await BrowserSession.deleteOne({ _id: id, userId });
 }
 
-/** Persistence-backed `SessionStore` — the only place `core/browser-automation/` is wired to Mongo,
+/** Persistence-backed `SessionStore` — the only place `core/browser/` is wired to Mongo,
  * kept entirely outside the framework core (docs/BROWSER-AUTOMATION-FRAMEWORK-PLAN.md §6). Scoped to
  * one user's sessions so a task can never restore another user's storageState by guessing an id. */
 export class MongoSessionStore implements SessionStore {
@@ -41,7 +41,10 @@ export class MongoSessionStore implements SessionStore {
 
   async load(sessionId: string): Promise<string | null> {
     await connectToDatabase();
-    const doc = await BrowserSession.findOne({ _id: sessionId, userId: this.userId }).lean();
+    // storageStateEnc is `select: false`; the worker is the one caller allowed to ask for it.
+    const doc = await BrowserSession.findOne({ _id: sessionId, userId: this.userId })
+      .select("+storageStateEnc")
+      .lean();
     if (!doc) return null;
     BrowserSession.updateOne({ _id: sessionId }, { lastUsedAt: new Date() }).catch(() => {});
     return decryptSecret(doc.storageStateEnc);
@@ -68,9 +71,11 @@ export async function getBrowserTaskRun(userId: string, runId: string) {
   return BrowserTaskRun.findOne({ _id: runId, userId }).lean();
 }
 
-export async function listExecutionLogs(runId: string, limit = 200) {
+export async function listExecutionLogs(userId: string, runId: string, limit = 200) {
   await connectToDatabase();
-  return BrowserExecutionLog.find({ runId }).sort({ timestamp: -1 }).limit(limit).lean();
+  // Scoped by userId, not runId alone. A runId is a Job id; filtering on it by itself would let
+  // anyone holding one read another user's browser run history.
+  return BrowserExecutionLog.find({ userId, runId }).sort({ timestamp: -1 }).limit(limit).lean();
 }
 
 /**
@@ -203,7 +208,10 @@ export class MongoTaskStore implements TaskStore {
 /** Wraps an in-memory `ExecutionMonitor` (live snapshot for the dashboard) so every `record()` call
  * also lands in `BrowserExecutionLog` (history that survives past the run, per §6). */
 export class PersistingExecutionMonitor implements ExecutionMonitor {
-  constructor(private readonly inner: ExecutionMonitor) {}
+  constructor(
+    private readonly inner: ExecutionMonitor,
+    private readonly userId: string,
+  ) {}
 
   snapshot(runId: string) {
     return this.inner.snapshot(runId);
@@ -212,7 +220,13 @@ export class PersistingExecutionMonitor implements ExecutionMonitor {
   async record(runId: string, entry: { level: "info" | "warn" | "error"; message: string; data?: unknown }): Promise<void> {
     await this.inner.record(runId, entry);
     await connectToDatabase();
-    await BrowserExecutionLog.create({ runId, level: entry.level, message: entry.message, data: entry.data });
+    await BrowserExecutionLog.create({
+      userId: this.userId,
+      runId,
+      level: entry.level,
+      message: entry.message,
+      data: entry.data,
+    });
   }
 }
 
