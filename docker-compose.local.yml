@@ -1,0 +1,48 @@
+# Local development infrastructure — MongoDB and Redis only.
+#
+# The app and the worker deliberately run on the host, not in containers: `next dev` and
+# `tsx watch` both want a fast filesystem watcher and instant reload, and Playwright and FFmpeg
+# both want a browser and binaries that are simpler to install once on the host than to rebuild
+# into an image on every change.
+#
+# So this file provides the two stateful services you would otherwise have to install, and
+# `npm run dev:all` runs everything else.
+#
+#   docker compose -f docker-compose.local.yml up -d
+#   npm run dev:all
+#
+# Nothing here is production configuration. There are no passwords because nothing is exposed
+# beyond localhost; do not copy this file to a server.
+
+name: ai-production-os-local
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
+  redis_data:

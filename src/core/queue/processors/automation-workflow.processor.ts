@@ -184,7 +184,9 @@ export async function processAutomationWorkflowJob(bullJob: BullJob<BullJobData>
 
 async function loadStorageState(userId: string, sessionId?: string): Promise<unknown> {
   if (!sessionId) return undefined;
-  const doc = await BrowserSessionModel.findOne({ _id: sessionId, userId }).lean();
+  // storageStateEnc is `select: false` — explicitly requested here, and only here plus
+  // MongoSessionStore, both of which run in the worker.
+  const doc = await BrowserSessionModel.findOne({ _id: sessionId, userId }).select("+storageStateEnc").lean();
   if (!doc?.storageStateEnc) return undefined;
   BrowserSessionModel.updateOne({ _id: sessionId }, { lastUsedAt: new Date() }).catch(() => {});
   return JSON.parse(decryptSecret(doc.storageStateEnc)) as unknown;

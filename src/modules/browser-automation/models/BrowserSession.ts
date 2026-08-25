@@ -11,7 +11,12 @@ const browserSessionSchema = new Schema(
     userId: { type: String, required: true, index: true },
     providerId: { type: String, required: true },
     label: { type: String, required: true },
-    storageStateEnc: { type: String, required: true },
+    // `select: false` so the ciphertext is not loaded — and therefore cannot be serialised into an
+    // API response — unless a caller explicitly asks with `.select("+storageStateEnc")`. Only the
+    // worker asks. Before the merge this relied on every query remembering to write
+    // `-storageStateEnc`; one forgotten exclusion would have put an encrypted browser session in a
+    // JSON response. Failing closed is the right default for a field like this.
+    storageStateEnc: { type: String, required: true, select: false },
     connectedAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date },
   },

@@ -41,7 +41,7 @@ export async function processBrowserTaskJob(bullJob: BullJob<BullJobData>): Prom
       createBrowserManager: (id) => new PlaywrightBrowserManager(id, eventBus),
       createTabManager: () => new DefaultTabManager(),
       taskStore,
-      executionMonitor: new PersistingExecutionMonitor(new EventBusExecutionMonitor(eventBus)),
+      executionMonitor: new PersistingExecutionMonitor(new EventBusExecutionMonitor(eventBus), jobDoc.userId),
     });
 
     // Cross-process cooperative cancel/pause: the API route that set BrowserTaskRun's flags runs on

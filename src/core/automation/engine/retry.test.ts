@@ -54,6 +54,11 @@ describe("withRetry", () => {
     );
     const outcome = await withRetry(fn, policy({ maxRetries: 1 }));
     expect(fn).toHaveBeenCalledTimes(2);
+    // The ported test built `outcome` and never asserted on it. Assert what it should have: the
+    // retries were exhausted, so the error is reported rather than swallowed into a silent success.
+    expect(outcome.attempts).toBe(2);
+    expect(outcome.error).toBeInstanceOf(AutomationError);
+    expect(outcome.result).toBeUndefined();
   });
 
   it("calls onRetry with the attempt number and the error", async () => {
