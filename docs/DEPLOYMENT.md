@@ -1,5 +1,8 @@
 # Deployment
 
+For the click-by-click version — every variable, which dashboard it goes in, and how to operate the
+system afterwards — see [OPERATIONS.md](./OPERATIONS.md). This document is the shape of it.
+
 Two processes. The Next.js app on Vercel, the worker anywhere that stays running.
 
 The split is not a preference — it is the constraint the whole architecture is built around.

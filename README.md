@@ -36,6 +36,9 @@ and a local LLM and image worker, it needs no external service at all — see
 
 `npm run verify` runs typecheck, lint and the test suite.
 
+Deploying? [`docs/OPERATIONS.md`](docs/OPERATIONS.md) is the runbook: every Vercel and Render
+variable, first-run setup, daily operation and troubleshooting.
+
 Then sign in and connect at least one Google account at `/accounts` (OAuth-confirm identity, then
 paste a free Gemini API key from [AI Studio](https://aistudio.google.com/app/apikey)) — nothing
 generates without one. See `docs/deployment.md` for the full production setup, including the two ways
