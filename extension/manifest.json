@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Videos Google Flow Runner",
+  "version": "1.1.0",
+  "description": "Claims Videos browser tasks and executes them in Google Flow.",
+  "action": { "default_title": "Videos Flow Runner" },
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "permissions": ["sidePanel", "storage", "tabs", "scripting", "downloads", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["https://labs.google/*", "https://flow.google/*"],
+      "js": ["content/executor.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
