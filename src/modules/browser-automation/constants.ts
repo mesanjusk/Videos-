@@ -1,14 +1,4 @@
-/**
- * Zero-import constants shared by both Mongoose models and zod schemas in this module — the same
- * pattern established for `modules/production-profiles/constants.ts` (Module 6) after a "use
- * client" component transitively importing a Mongoose model file bloated a route to 327kB. Never
- * add an import here.
- *
- * These mirror `ExecutionState` from `core/browser/types.ts` but are their own runtime
- * source of truth for persistence — the framework core stays Mongoose-free, so it cannot export a
- * runtime array for this file to import.
- */
-
+/** Zero-import constants shared by Mongoose models and zod schemas. */
 export const BROWSER_TASK_RUN_STATES = [
   "idle",
   "launching",
@@ -21,6 +11,21 @@ export const BROWSER_TASK_RUN_STATES = [
   "cancelled",
 ] as const;
 export type BrowserTaskRunState = (typeof BROWSER_TASK_RUN_STATES)[number];
+
+/** Extension/Google Flow lifecycle. Kept separate from the generic TaskEngine state so the
+ * existing Playwright runner remains backward compatible. */
+export const BROWSER_TASK_STAGES = [
+  "pending",
+  "claimed",
+  "opening_flow",
+  "uploading_assets",
+  "generating",
+  "combining",
+  "exporting",
+  "completed",
+  "failed",
+] as const;
+export type BrowserTaskStage = (typeof BROWSER_TASK_STAGES)[number];
 
 export const BROWSER_EXECUTION_LOG_LEVELS = ["info", "warn", "error"] as const;
 export type BrowserExecutionLogLevel = (typeof BROWSER_EXECUTION_LOG_LEVELS)[number];
