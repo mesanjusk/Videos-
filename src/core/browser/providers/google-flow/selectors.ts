@@ -3,7 +3,7 @@
  * semantic/text fallback and the Chrome extension executor tries alternatives in order.
  * Recalibrate here when Flow changes; mission control flow should not need edits.
  */
-export const FLOW_BASE_URL = "https://labs.google/flow";
+export const FLOW_BASE_URL = "https://flow.google/";
 
 export const FLOW_SELECTORS = {
   loggedOutMarker: 'a[href*="accounts.google.com"], text=/sign in/i',
