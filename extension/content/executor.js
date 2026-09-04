@@ -1,6 +1,7 @@
 (() => {
   if (window.__VIDEOS_FLOW_EXECUTOR_INSTALLED__) return;
   window.__VIDEOS_FLOW_EXECUTOR_INSTALLED__ = true;
+  const pendingUploads = new Map();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "VIDEOS_FLOW_ACTION") return false;
@@ -20,21 +21,46 @@
       return el ? { success: true } : optionalOrError(payload, `Element not found: ${payload.selector}`);
     }
 
-    if (action === "upload") {
+    if (action === "upload_begin") {
       const input = await waitForElement(payload.selector, 15000);
       if (!input) return optionalOrError(payload, `Upload input not found: ${payload.selector}`);
       if (!(input instanceof HTMLInputElement) || input.type !== "file") {
         return optionalOrError(payload, "Resolved upload target is not input[type=file]");
       }
-      const transfer = new DataTransfer();
-      for (const file of payload.files || []) {
-        const bytes = base64ToBytes(file.base64);
-        transfer.items.add(new File([bytes], file.name, { type: file.mimeType || "application/octet-stream" }));
+      pendingUploads.set(payload.uploadId, {
+        input,
+        files: (payload.files || []).map((file) => ({ ...file, chunks: [] })),
+      });
+      return { success: true };
+    }
+
+    if (action === "upload_chunk") {
+      const upload = pendingUploads.get(payload.uploadId);
+      if (!upload) return { success: false, error: "Unknown upload session" };
+      const file = upload.files.find((item) => item.fileId === payload.fileId);
+      if (!file) return { success: false, error: "Unknown upload file" };
+      file.chunks[payload.chunkIndex] = payload.base64;
+      return { success: true };
+    }
+
+    if (action === "upload_commit") {
+      const upload = pendingUploads.get(payload.uploadId);
+      if (!upload) return { success: false, error: "Unknown upload session" };
+      try {
+        const transfer = new DataTransfer();
+        for (const file of upload.files) {
+          const parts = file.chunks.map(base64ToBytes);
+          const size = parts.reduce((sum, part) => sum + part.byteLength, 0);
+          if (size !== file.size) throw new Error(`Upload size mismatch for ${file.name}: ${size} != ${file.size}`);
+          transfer.items.add(new File(parts, file.name, { type: file.mimeType || "application/octet-stream" }));
+        }
+        upload.input.files = transfer.files;
+        upload.input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        upload.input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        return { success: true, detail: `Attached ${transfer.files.length} file(s)` };
+      } finally {
+        pendingUploads.delete(payload.uploadId);
       }
-      input.files = transfer.files;
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-      return { success: true, detail: `Attached ${transfer.files.length} file(s)` };
     }
 
     const el = await waitForElement(payload.selector, 15000);
@@ -114,7 +140,6 @@
     return null;
   }
 
-  /** Splits selector fallbacks without splitting commas inside CSS attribute/functional expressions. */
   function splitAlternatives(value) {
     const result = [];
     let current = "";
