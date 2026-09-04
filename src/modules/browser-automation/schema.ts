@@ -1,15 +1,17 @@
 import { z } from "zod";
+import { BROWSER_TASK_STAGES } from "./constants";
 
 const taskStepSchema = z.object({
   id: z.string().min(1),
   action: z.enum([
     "navigate", "click", "double_click", "right_click", "hover",
     "input_text", "paste", "keyboard_shortcut",
-    "upload_file", "download_file",
+    "upload_file", "upload_url", "download_file",
     "scroll", "drag", "wait", "sleep",
     "screenshot", "capture_html", "capture_dom",
   ]),
   params: z.record(z.string(), z.unknown()).default({}),
+  stage: z.enum(BROWSER_TASK_STAGES).optional(),
   verify: z
     .object({
       type: z.enum(["selector_visible", "url_matches", "custom"]),
@@ -28,6 +30,16 @@ export const executeBrowserTaskSchema = z.object({
   projectId: z.string().optional(),
 });
 export type ExecuteBrowserTaskInput = z.infer<typeof executeBrowserTaskSchema>;
+
+export const extensionTaskUpdateSchema = z.object({
+  workerId: z.string().min(1).max(120),
+  stage: z.enum(BROWSER_TASK_STAGES),
+  currentStepIndex: z.number().int().min(0).optional(),
+  error: z.string().max(4000).optional(),
+  downloads: z.array(z.object({ path: z.string(), url: z.string().optional() })).optional(),
+  resultMetadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type ExtensionTaskUpdateInput = z.infer<typeof extensionTaskUpdateSchema>;
 
 export const createBrowserSessionSchema = z.object({
   providerId: z.string().min(1),
