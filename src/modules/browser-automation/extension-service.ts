@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { connectToDatabase } from "@/core/db/mongoose";
-import type { BrowserTask, BrowserTaskStage } from "@/core/browser/types";
+import type { BrowserTask } from "@/core/browser/types";
 import type { ExecuteBrowserTaskInput, ExtensionTaskUpdateInput } from "./schema";
 import { BrowserTaskRun } from "./models/BrowserTaskRun";
 
@@ -85,7 +85,7 @@ export async function failStaleExtensionTasks(staleBefore: Date) {
   return BrowserTaskRun.updateMany(
     {
       executionTarget: "extension",
-      stage: { $nin: ["pending", "completed", "failed"] satisfies BrowserTaskStage[] },
+      stage: { $nin: ["pending", "completed", "failed"] },
       lastHeartbeatAt: { $lt: staleBefore },
     },
     { $set: { stage: "failed", state: "failed", error: "Extension heartbeat expired", completedAt: new Date() } },
