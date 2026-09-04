@@ -6,7 +6,9 @@ This MV3 Chrome extension is the browser execution client for the Videos project
 
 `Videos UI -> production engine/Gemini -> Google Flow mission API -> extension task queue -> Chrome extension -> Google Flow -> scene generation -> Flow timeline/combine -> Flow MP4 export -> task status`
 
-The extension does **not** call Gemini during normal execution. The existing Videos browser/AI recovery code remains available for future UI-healing/fallback work, but deterministic selectors and semantic fallbacks are tried first.
+The extension does **not** call Gemini during normal execution. Deterministic selectors and semantic fallbacks are always tried first. If a structured `click`, `paste`, `input_text`, or `wait_for` step fails, the optional AI recovery mode can inspect only the currently visible interactive elements and ask Gemini to select a replacement element for that same planned action. The original prompt/text and mission are not regenerated.
+
+This recovery path was synced from the newer `mesanjusk/Automation` extension changes through upstream commit `bc54e03e388f0ba50bb87ee40a88defc80720634`, including free-model fallback handling, zero-quota model skipping, empty-response recovery, thought-part extraction, and JSON parsing fallback.
 
 The legacy Playwright Google Flow path and FFmpeg renderer remain in the repository for safety. New extension missions mark Google Flow as the final output system and FFmpeg as fallback/post-processing only. Do not delete legacy code until live Flow validation is complete.
 
@@ -20,7 +22,9 @@ Extension tasks use `executionTarget: "extension"` and are intentionally not ins
 
 Set a long random `BROWSER_EXTENSION_TOKEN` in the Videos deployment environment. Load this `/extension` directory as an unpacked Chrome extension, open its side panel, enter the Videos app base URL and the same token, then enable automatic claiming.
 
-The extension polls the authenticated claim endpoint and reports every lifecycle stage back with its worker ID.
+Optional AI recovery can be enabled separately in the side panel. Add a Gemini API key and model only if you want last-resort selector recovery. If AI recovery is disabled or no key is configured, the extension remains fully deterministic and fails normally when all selectors fail.
+
+The extension polls the authenticated claim endpoint and reports every lifecycle stage back with its worker ID. Completed/failed task metadata also records whether any AI selector recoveries were used.
 
 ## Creating a Flow mission
 
