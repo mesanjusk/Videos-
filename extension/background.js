@@ -5,6 +5,7 @@ const DEFAULTS = {
   enabled: false,
 };
 
+const UPLOAD_CHUNK_BYTES = 256 * 1024;
 let running = false;
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -96,14 +97,7 @@ async function executeTask(run) {
       if (!tabId) throw new Error("Task attempted a page action before navigate");
 
       if (step.action === "upload_file" || step.action === "upload_url") {
-        const files = await resolveUploadFiles(step, task.metadata || {});
-        const result = await sendPageAction(tabId, {
-          action: "upload",
-          selector: step.params.selector,
-          files,
-          optional: step.params.optional === true,
-        }, step.timeoutMs);
-        if (!result.success) throw new Error(result.error || `Upload failed at ${step.id}`);
+        await uploadAssets(tabId, step, task.metadata || {});
         continue;
       }
 
@@ -178,25 +172,66 @@ function resolveTextFrom(source, metadata) {
   return metadata[source];
 }
 
-async function resolveUploadFiles(step, metadata) {
-  let specs = [];
-  if (Array.isArray(step.params.files)) specs = step.params.files;
-  else if (typeof step.params.url === "string") specs = [{ url: step.params.url, fileName: step.params.fileName, mimeType: step.params.mimeType }];
-  else if (step.params.filesFrom === "referenceImages") {
-    specs = (metadata.referenceImageUrls || []).map((url) => ({ url }));
+function resolveUploadSpecs(step, metadata) {
+  if (Array.isArray(step.params.files)) return step.params.files;
+  if (typeof step.params.url === "string") {
+    return [{ url: step.params.url, fileName: step.params.fileName, mimeType: step.params.mimeType }];
   }
+  if (step.params.filesFrom === "referenceImages") {
+    return (metadata.referenceImageUrls || []).map((url) => ({ url }));
+  }
+  return [];
+}
+
+async function uploadAssets(tabId, step, metadata) {
+  const specs = resolveUploadSpecs(step, metadata);
   if (!specs.length) throw new Error(`No upload files resolved for ${step.id}`);
 
-  return Promise.all(specs.map(async (spec, index) => {
+  const uploadId = crypto.randomUUID();
+  const files = [];
+  const buffers = [];
+  for (let index = 0; index < specs.length; index += 1) {
+    const spec = specs[index];
     const response = await fetch(spec.url);
     if (!response.ok) throw new Error(`Could not fetch reference asset (${response.status}): ${spec.url}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
-    return {
+    const fileId = `${uploadId}-${index}`;
+    files.push({
+      fileId,
       name: spec.fileName || fileNameFromUrl(spec.url, index),
       mimeType: spec.mimeType || response.headers.get("content-type") || "application/octet-stream",
-      base64: bytesToBase64(bytes),
-    };
-  }));
+      size: bytes.byteLength,
+    });
+    buffers.push({ fileId, bytes });
+  }
+
+  let result = await sendPageAction(tabId, {
+    action: "upload_begin",
+    uploadId,
+    selector: step.params.selector,
+    files,
+    optional: step.params.optional === true,
+  }, step.timeoutMs || 30000);
+  if (!result.success) throw new Error(result.error || `Upload initialization failed at ${step.id}`);
+
+  for (const file of buffers) {
+    let chunkIndex = 0;
+    for (let offset = 0; offset < file.bytes.length; offset += UPLOAD_CHUNK_BYTES) {
+      const chunk = file.bytes.subarray(offset, offset + UPLOAD_CHUNK_BYTES);
+      result = await sendPageAction(tabId, {
+        action: "upload_chunk",
+        uploadId,
+        fileId: file.fileId,
+        chunkIndex,
+        base64: bytesToBase64(chunk),
+      }, step.timeoutMs || 30000);
+      if (!result.success) throw new Error(result.error || `Upload chunk failed at ${step.id}`);
+      chunkIndex += 1;
+    }
+  }
+
+  result = await sendPageAction(tabId, { action: "upload_commit", uploadId }, step.timeoutMs || 30000);
+  if (!result.success) throw new Error(result.error || `Upload commit failed at ${step.id}`);
 }
 
 function fileNameFromUrl(url, index) {
@@ -211,9 +246,7 @@ function fileNameFromUrl(url, index) {
 function bytesToBase64(bytes) {
   let binary = "";
   const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   return btoa(binary);
 }
 
