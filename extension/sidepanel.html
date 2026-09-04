@@ -5,16 +5,36 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Videos Flow Runner</title>
   <style>
-    body{font:14px system-ui,sans-serif;margin:18px;background:#111;color:#eee}label{display:block;margin:12px 0 5px}input{box-sizing:border-box;width:100%;padding:9px;border:1px solid #444;border-radius:7px;background:#1d1d1d;color:#fff}button{margin-top:14px;padding:9px 12px;border:0;border-radius:7px;cursor:pointer}.row{display:flex;gap:8px}.row button{flex:1}.status{margin-top:14px;padding:10px;border-radius:7px;background:#1d1d1d;white-space:pre-wrap}.muted{color:#aaa;font-size:12px}</style>
+    body{font:14px system-ui,sans-serif;margin:18px;background:#111;color:#eee}label{display:block;margin:12px 0 5px}input,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid #444;border-radius:7px;background:#1d1d1d;color:#fff}button{margin-top:14px;padding:9px 12px;border:0;border-radius:7px;cursor:pointer}.row{display:flex;gap:8px}.row button{flex:1}.status{margin-top:14px;padding:10px;border-radius:7px;background:#1d1d1d;white-space:pre-wrap}.muted{color:#aaa;font-size:12px}.section{margin-top:18px;padding-top:14px;border-top:1px solid #333}h3{margin:0 0 6px;font-size:15px}</style>
 </head>
 <body>
   <h2>Videos → Google Flow</h2>
-  <p class="muted">This runner executes structured tasks from the Videos app. It does not call Gemini during normal execution.</p>
+  <p class="muted">Structured Flow tasks stay primary. Gemini is used only when a planned selector/action fails and AI recovery is enabled.</p>
+
   <label>Videos app URL</label>
   <input id="apiBaseUrl" placeholder="https://your-videos-app.vercel.app" />
   <label>Extension token</label>
   <input id="extensionToken" type="password" autocomplete="off" />
   <label><input id="enabled" type="checkbox" style="width:auto" /> Enable automatic task claiming</label>
+
+  <div class="section">
+    <h3>AI recovery fallback</h3>
+    <p class="muted">Synced from the latest Automation extension logic. This is not used during normal deterministic execution.</p>
+    <label><input id="aiFallbackEnabled" type="checkbox" style="width:auto" /> Enable Gemini selector recovery</label>
+    <label>Gemini API key</label>
+    <input id="geminiApiKey" type="password" placeholder="AIzaSy..." autocomplete="off" />
+    <label>Gemini model</label>
+    <input id="geminiModel" list="geminiModels" value="gemini-2.5-flash" placeholder="gemini-2.5-flash" />
+    <datalist id="geminiModels">
+      <option value="gemini-2.5-flash"></option>
+      <option value="gemini-3.7-flash"></option>
+      <option value="gemini-3.8-flash"></option>
+      <option value="gemini-3.5-flash"></option>
+      <option value="gemini-3.1-flash-lite"></option>
+      <option value="gemini-3.6-flash"></option>
+    </datalist>
+  </div>
+
   <div class="row"><button id="save">Save</button><button id="poll">Claim now</button></div>
   <div id="status" class="status">Loading…</div>
   <script src="sidepanel.js"></script>
