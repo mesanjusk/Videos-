@@ -15,6 +15,7 @@ export type ActionType =
   | "paste"
   | "keyboard_shortcut"
   | "upload_file"
+  | "upload_url"
   | "download_file"
   | "scroll"
   | "drag"
@@ -24,11 +25,24 @@ export type ActionType =
   | "capture_html"
   | "capture_dom";
 
+export type BrowserTaskStage =
+  | "pending"
+  | "claimed"
+  | "opening_flow"
+  | "uploading_assets"
+  | "generating"
+  | "combining"
+  | "exporting"
+  | "completed"
+  | "failed";
+
 export interface TaskStep {
   id: string;
   action: ActionType;
   /** Action-specific, e.g. { selector, text } for input_text. Opaque to the framework. */
   params: Record<string, unknown>;
+  /** Optional extension-facing lifecycle stage. Server/Playwright runners may ignore it. */
+  stage?: BrowserTaskStage;
   verify?: {
     type: "selector_visible" | "url_matches" | "custom";
     params: Record<string, unknown>;
@@ -60,21 +74,6 @@ export type ExecutionState =
   | "failed"
   | "cancelled";
 
-/**
- * Where a failed run gave out.
- *
- * "setup" means the browser or the page never got as far as executing a step — a launch failure, a
- * missing Chromium, an unusable session. Those are infrastructure problems: the right response is
- * to let the job fail so the queue retries it later.
- *
- * "step" means the automation reached the site and an interaction went wrong — a changed selector,
- * a verification challenge, a render that never finished. Retrying that immediately just repeats
- * it; the right response is to degrade to whatever manual path the caller has.
- *
- * Collapsing the two (which the framework did before the merge, reporting only `state: "failed"`)
- * meant a caller had to guess from the error text. `core/ai/providers/google/google-flow-automated.ts`
- * needs exactly this distinction to preserve the behaviour Module 4's circuit breaker had.
- */
 export type FailureStage = "setup" | "step";
 
 export interface TaskResult {
