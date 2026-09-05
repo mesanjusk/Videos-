@@ -172,9 +172,9 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
       case "capture_dom":
         return { dom: await engine.captureDom(page) };
       case "probe_page": {
-        // Reads what is genuinely on the page and stamps a ref on each control. Recorded on the
-        // execution step, so a run that later fails can be diagnosed against the page as it
-        // actually was, not against the selector file's idea of it.
+        // Reads what is genuinely on the page and stamps a ref on each control. Handed to the
+        // ExecutionMonitor by TaskEngine, so a run that later fails can be diagnosed against the
+        // page as it actually was, not against the selector file's idea of it.
         const probe = await probePage(page, typeof params.limit === "number" ? params.limit : undefined);
         return { probe: probe as unknown as Record<string, unknown> };
       }

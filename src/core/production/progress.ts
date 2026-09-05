@@ -62,7 +62,7 @@ export interface ProgressReport {
    * function's to know — the caller owns routing, and a href half-built here ("" to be filled in
    * later) is the kind of thing that ships as a dead link.
    */
-  action?: { label: string; target: "accounts" | "project" };
+  action?: { label: string; target: "accounts" | "project" | "retry" };
 }
 
 const FINISHED_SCENE_STATUSES = new Set(["video_ready", "voice_ready", "lipsync_ready", "complete"]);
@@ -95,9 +95,10 @@ export function computeProgress(input: ProgressInput): ProgressReport {
       ...base,
       phase: "problem",
       title: "Something went wrong",
-      detail: "One of the steps failed. Open the project to see which one and try it again.",
+      detail: "One step failed. Running it again is usually enough — the rest of your video is safe.",
       percent: percentFor(input, imagesDone, scenesDone),
       busy: false,
+      action: { label: "Try again", target: "retry" },
     };
   }
 

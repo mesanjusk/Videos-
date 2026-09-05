@@ -34,10 +34,12 @@ describe("computeProgress", () => {
     expect(report.busy).toBe(true);
   });
 
-  it("reports a failure once nothing is left to finish it", () => {
+  it("reports a failure once nothing is left to finish it, and offers a way out of it", () => {
     const report = computeProgress(input({ jobStatuses: ["failed", "completed"] }));
     expect(report.phase).toBe("problem");
     expect(report.busy).toBe(false);
+    // A dead end is not a state to leave someone in on the only screen this project has.
+    expect(report.action?.target).toBe("retry");
   });
 
   it("names the one setup step when a scene parks on a human and Flow is not connected", () => {

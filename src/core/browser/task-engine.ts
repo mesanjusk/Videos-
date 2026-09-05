@@ -217,7 +217,16 @@ export class DefaultTaskEngine implements TaskEngine {
       if (step.action === "screenshot") {
         screenshots.push((result.output?.screenshotPath as string) ?? `screenshot-${step.id}`);
       }
-      if (executionMonitor) await executionMonitor.record(runId, { level: "info", message: `Completed step ${step.id} (${step.action})` });
+      if (executionMonitor) {
+        await executionMonitor.record(runId, {
+          level: "info",
+          // The change summary and the probe are the two things worth having on the record after
+          // the fact: one says whether an action did anything, the other says what the page really
+          // looked like at that moment. Neither is reconstructable from a failed run's error alone.
+          message: `Completed step ${step.id} (${step.action})${result.changeSummary ? ` — ${result.changeSummary}` : ""}`,
+          data: result.output?.probe,
+        });
+      }
     }
 
     if (finalState === "failed") await this.transition(runId, "failed");

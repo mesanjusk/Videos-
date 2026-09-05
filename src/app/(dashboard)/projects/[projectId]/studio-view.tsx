@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, Loader2, Pencil, Play, Sparkles } from "lucide-react";
+import { Download, Loader2, Pencil, Play, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ProgressPhase } from "@/core/production/progress";
 
@@ -16,12 +16,13 @@ interface ProgressPayload {
     scenesDone: number;
     scenesTotal: number;
     busy: boolean;
-    action?: { label: string; target: string };
+    action?: { label: string; target: "accounts" | "project" | "retry" };
     href: string;
   };
   videoUrl: string | null;
   thumbnailUrl: string | null;
   failure: string | null;
+  failedJobId: string | null;
 }
 
 /**
@@ -141,6 +142,24 @@ const PHASE_ART: Record<ProgressPhase, string> = {
 
 function Working({ data }: { data: ProgressPayload }) {
   const { progress } = data;
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const retry = async () => {
+    if (!data.failedJobId) return;
+    setRetrying(true);
+    setRetryError(null);
+    const res = await fetch(`/api/jobs/${data.failedJobId}/retry`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setRetryError(body.error ?? "That did not work.");
+      setRetrying(false);
+      return;
+    }
+    // The poll loop stopped when the run stopped; a full reload is the simplest way to restart it
+    // against the new job, and there is nothing on this screen worth preserving across it.
+    window.location.reload();
+  };
 
   return (
     <>
@@ -171,7 +190,12 @@ function Working({ data }: { data: ProgressPayload }) {
         )}
       </div>
 
-      {progress.action ? (
+      {progress.action?.target === "retry" ? (
+        <Button size="lg" className="h-14 px-8 text-base" onClick={retry} disabled={retrying || !data.failedJobId}>
+          {retrying ? <Loader2 className="h-5 w-5 animate-spin" /> : <RotateCcw className="h-5 w-5" />}
+          {progress.action.label}
+        </Button>
+      ) : progress.action ? (
         <Button asChild size="lg" className="h-14 px-8 text-base">
           <Link href={progress.href}>{progress.action.label}</Link>
         </Button>
@@ -181,6 +205,8 @@ function Working({ data }: { data: ProgressPayload }) {
           You can close this page — it keeps going without you.
         </p>
       )}
+
+      {retryError && <p className="text-sm text-destructive">{retryError}</p>}
 
       {data.failure && progress.phase === "problem" && (
         <p className="max-w-md rounded-lg bg-muted px-4 py-3 text-left text-xs text-muted-foreground">{data.failure}</p>

@@ -50,6 +50,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       project.thumbnailAssetId ? Asset.findOne({ _id: project.thumbnailAssetId, userId }).select("url").lean() : null,
     ]);
 
+    const failedJob = jobs.find((j) => j.status === "failed");
+
     return NextResponse.json({
       title: project.storyJson?.title || project.title,
       progress: {
@@ -58,9 +60,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       },
       videoUrl: video?.url ?? null,
       thumbnailUrl: thumbnail?.url ?? null,
-      // The first failure's own message, so "something went wrong" can be opened up without
-      // sending someone to a separate history page to find out what.
-      failure: jobs.find((j) => j.status === "failed")?.error ?? null,
+      // The first failure's own message and id, so "something went wrong" can be both explained
+      // and acted on here, rather than sending someone to a history page to find out what broke and
+      // giving them nothing to do about it when they get there.
+      failure: failedJob?.error ?? null,
+      failedJobId: failedJob?._id.toString() ?? null,
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
