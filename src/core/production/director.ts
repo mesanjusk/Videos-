@@ -82,6 +82,11 @@ Constraints:
 - aim for about ${sceneCount} storyboard scenes
 - renderer: ${defaults.renderer ?? "ffmpeg"}
 
+Vocabularies you must use exactly, with no other values:
+- assetRequirements[].kind: one of image, video, audio, graphic. A generated clip is "video"; a
+  title card, caption plate or overlay is "graphic"; music and sound effects are "audio".
+- each storyboard scene's durationSeconds: a number between 1 and 60.
+
 Produce a JSON object with exactly these keys:
 objective, audience, language, durationSeconds, aspectRatio, platform, tone,
 researchPlan { required, questions[], sensitiveClaims[] },
@@ -119,7 +124,8 @@ export async function directProduction(request: DirectorRequest): Promise<Direct
   });
 
   const raw = parseJsonResponse<unknown>(response.text);
-  const parsed = productionPlanSchema.safeParse(raw);
+  const { value, notes: shapeNotes } = coercePlanShape(raw);
+  const parsed = productionPlanSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
       `The director produced a plan that does not fit the required shape: ${parsed.error.issues
@@ -131,7 +137,79 @@ export async function directProduction(request: DirectorRequest): Promise<Direct
   const { plan, notes } = reconcile(parsed.data, request, pipeline);
   const stages = pipeline.stages.filter((stage) => !plan.skippedStages.includes(stage));
 
-  return { plan, pipeline, stages, costPolicy, providerId: response.providerId, notes };
+  return { plan, pipeline, stages, costPolicy, providerId: response.providerId, notes: [...shapeNotes, ...notes] };
+}
+
+/** Words models reach for that mean one of the four kinds the schema actually accepts. */
+const ASSET_KIND_SYNONYMS: Record<string, "image" | "video" | "audio" | "graphic"> = {
+  video_clip: "video",
+  "video-clip": "video",
+  clip: "video",
+  footage: "video",
+  animation: "video",
+  photo: "image",
+  illustration: "image",
+  still: "image",
+  music: "audio",
+  sound: "audio",
+  sfx: "audio",
+  sound_effect: "audio",
+  voiceover: "audio",
+  text: "graphic",
+  title: "graphic",
+  title_card: "graphic",
+  overlay: "graphic",
+  caption: "graphic",
+};
+
+/**
+ * Repairs the near-misses a model makes against this schema, before the schema sees them.
+ *
+ * Zod rejects the whole plan on any one bad field, and a rejected plan costs a full generation to
+ * replace — on a free Gemini tier that is measured in requests per day, it can cost the rest of the
+ * day. So a storyboard, script and cast were thrown away live because two asset requirements said
+ * `video_clip` where the enum says `video`. That is not a plan worth discarding; it is a synonym.
+ *
+ * Deliberately narrow. It maps vocabulary a model plausibly reaches for and clamps numbers into
+ * their documented range — both things `reconcile` would have done had the value ever reached it.
+ * Anything it does not recognise is left exactly as the model wrote it, so genuinely broken output
+ * still fails loudly instead of being quietly reshaped into something nobody planned. Every repair
+ * is reported in `notes` for the same reason every other correction is: the user sees what the
+ * Director changed.
+ */
+export function coercePlanShape(raw: unknown): { value: unknown; notes: string[] } {
+  const notes: string[] = [];
+  if (typeof raw !== "object" || raw === null) return { value: raw, notes };
+  const plan = { ...(raw as Record<string, unknown>) };
+
+  if (Array.isArray(plan.assetRequirements)) {
+    plan.assetRequirements = plan.assetRequirements.map((requirement) => {
+      if (typeof requirement !== "object" || requirement === null) return requirement;
+      const entry = requirement as Record<string, unknown>;
+      if (typeof entry.kind !== "string") return entry;
+      const mapped = ASSET_KIND_SYNONYMS[entry.kind.trim().toLowerCase().replace(/\s+/g, "_")];
+      if (!mapped || mapped === entry.kind) return entry;
+      notes.push(`Asset kind "${entry.kind}" read as "${mapped}".`);
+      return { ...entry, kind: mapped };
+    });
+  }
+
+  if (Array.isArray(plan.storyboard)) {
+    plan.storyboard = plan.storyboard.map((scene) => {
+      if (typeof scene !== "object" || scene === null) return scene;
+      const entry = scene as Record<string, unknown>;
+      const duration = entry.durationSeconds;
+      if (typeof duration !== "number" || Number.isNaN(duration)) return entry;
+      const clamped = Math.min(60, Math.max(1, duration));
+      if (clamped === duration) return entry;
+      // reconcile() rescales the storyboard to the requested total anyway; this only gets the value
+      // past the schema so that rescaling can happen at all.
+      notes.push(`Scene duration ${duration}s clamped to ${clamped}s before planning.`);
+      return { ...entry, durationSeconds: clamped };
+    });
+  }
+
+  return { value: plan, notes };
 }
 
 /**
