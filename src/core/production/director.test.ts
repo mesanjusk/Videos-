@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reconcile } from "./director";
+import { reconcile, coercePlanShape } from "./director";
 import { inferPipeline, getPipeline, listPipelines, PRODUCTION_PIPELINES } from "./pipelines";
 import { productionPlanSchema, type ProductionPlan } from "./types";
 
@@ -152,5 +152,49 @@ describe("plan schema", () => {
 
   it("defaults publishing to off — planning a video never implies posting it", () => {
     expect(productionPlanSchema.parse({ objective: "x" }).publishingPlan.viaBrowserAutomation).toBe(false);
+  });
+});
+
+describe("coercePlanShape", () => {
+  it("reads a near-miss asset kind rather than discarding the whole plan", () => {
+    // The live failure: a complete plan — storyboard, script, cast — thrown away because two asset
+    // requirements said "video_clip" where the enum says "video". On a free tier metered in
+    // requests per day, replacing that plan can cost the rest of the day.
+    const { value, notes } = coercePlanShape({
+      objective: "Explain sehra",
+      assetRequirements: [
+        { kind: "video_clip", description: "groom entering" },
+        { kind: "SFX", description: "shehnai" },
+      ],
+    });
+
+    const plan = productionPlanSchema.parse(value);
+    expect(plan.assetRequirements.map((a) => a.kind)).toEqual(["video", "audio"]);
+    expect(notes).toHaveLength(2);
+  });
+
+  it("clamps a scene duration into the range the schema accepts", () => {
+    const { value, notes } = coercePlanShape({
+      objective: "x",
+      storyboard: [{ index: 0, visual: "a", durationSeconds: 90 }],
+    });
+
+    expect(productionPlanSchema.parse(value).storyboard.map((s) => s.durationSeconds)).toEqual([60]);
+    expect(notes.join(" ")).toContain("clamped");
+  });
+
+  it("leaves a kind it does not recognise alone, so broken output still fails loudly", () => {
+    const { value, notes } = coercePlanShape({
+      objective: "x",
+      assetRequirements: [{ kind: "hologram", description: "?" }],
+    });
+
+    expect(notes).toEqual([]);
+    expect(productionPlanSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("passes anything that is not a plan object straight through", () => {
+    expect(coercePlanShape("not a plan").value).toBe("not a plan");
+    expect(coercePlanShape(null).value).toBe(null);
   });
 });
