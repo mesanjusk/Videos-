@@ -9,7 +9,7 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const session = await auth();
-  if (session?.user) redirect("/dashboard");
+  if (session?.user) redirect("/create");
   const { callbackUrl } = await searchParams;
 
   return (
@@ -24,7 +24,7 @@ export default async function LoginPage({
             Turn an idea into a finished cartoon video — no prompts, no AI experience needed.
           </p>
         </div>
-        <LoginButton callbackUrl={callbackUrl ?? "/dashboard"} />
+        <LoginButton callbackUrl={callbackUrl ?? "/create"} />
       </div>
     </main>
   );

@@ -3,13 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { ChevronDown, Loader2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useJobPolling } from "@/hooks/use-job-polling";
 
@@ -37,13 +34,27 @@ export interface PipelineOption {
   stages: string[];
 }
 
-const COST_POLICY_HELP: Record<string, string> = {
-  ZERO_COST: "Only providers that cost nothing. Refuses to run rather than falling back to a paid one.",
-  FREE_PREFERRED: "Prefers free providers, but will use a paid one when no free route exists.",
-  BALANCED: "Uses whatever is configured as preferred. The default.",
-  BEST_QUALITY: "Picks the best provider available, paid or not.",
-};
-
+/**
+ * The whole product, on one screen: say what you want, press the button, watch it happen.
+ *
+ * ## What was removed, and why that is the feature
+ *
+ * This screen used to ask for five things before it would do anything: the idea, a pipeline, a cost
+ * policy, a language and a duration. Four of those are questions only someone who has read the
+ * architecture docs can answer, and every one of them already had a correct default. A person who
+ * does not know what "BALANCED" means cannot pick between it and "FREE_PREFERRED", and making them
+ * look at the choice does not teach them — it just stops them.
+ *
+ * They are all still here, under `More options`, closed. Nothing was taken away from the person who
+ * wants it; it was taken out of the way of the person who does not.
+ *
+ * The plan step is also gone from the happy path. It existed as a spend guard — "nothing is
+ * generated until you approve" — but it was guarding against a cost the user had already accepted by
+ * pressing the button, and the thing it showed them (a stage list, a pipeline id) was not
+ * information they could act on. Approval now happens in the same gesture as the request, and the
+ * plan itself is visible on the project the moment it exists. `Review the plan first` restores the
+ * old two-step flow for anyone who wants it.
+ */
 export function CreateVideoPanel({
   pipelines,
   recentPlans,
@@ -53,6 +64,8 @@ export function CreateVideoPanel({
 }) {
   const router = useRouter();
   const [request, setRequest] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
+  const [autoStart, setAutoStart] = useState(true);
   const [pipelineId, setPipelineId] = useState("auto");
   const [costPolicy, setCostPolicy] = useState("BALANCED");
   const [language, setLanguage] = useState("");
@@ -67,10 +80,31 @@ export function CreateVideoPanel({
   useEffect(() => {
     if (job?.status !== "completed") return;
     setJobId(null);
-    router.refresh();
-  }, [job?.status, router]);
+
+    // The planner records the plan it wrote on the job result (production-plan.processor.ts).
+    // Approving it here is what makes the whole thing one press instead of two — and it is the same
+    // call the old Approve button made, so a plan that cannot be approved still surfaces its own
+    // error rather than failing silently.
+    const resultPlanId = job.result?.planId as string | undefined;
+    if (!autoStart || !resultPlanId) {
+      router.refresh();
+      return;
+    }
+
+    (async () => {
+      const res = await fetch(`/api/production/plans/${resultPlanId}`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? "The plan was written but could not be started.");
+        router.refresh();
+        return;
+      }
+      router.push(`/projects/${body.projectId}`);
+    })();
+  }, [job?.status, job?.result, autoStart, router]);
 
   const planningFailed = job?.status === "failed";
+  const isWorking = isSubmitting || (!!jobId && !planningFailed);
 
   const submit = () => {
     setError(null);
@@ -88,119 +122,151 @@ export function CreateVideoPanel({
       });
       const body = await response.json();
       if (!response.ok) {
-        setError(body.error ?? "Could not start planning.");
+        setError(body.error ?? "Could not start.");
         return;
       }
       setJobId(body.jobId);
     });
   };
 
-  const isPlanning = isSubmitting || (!!jobId && job?.status !== "failed");
+  const draftPlans = recentPlans.filter((p) => p.status === "draft");
+  const runningPlans = recentPlans.filter((p) => p.projectId && p.status !== "draft").slice(0, 4);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 text-primary" />
-            One line in, a plan out
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="request">What should the video be?</Label>
-            <Textarea
-              id="request"
-              rows={3}
-              value={request}
-              onChange={(e) => setRequest(e.target.value)}
-              placeholder="Create a 60-second Hindi Instagram Reel explaining the logic behind Sehra in Indian weddings."
-            />
-            <p className="text-xs text-muted-foreground">
-              Nothing is generated yet. You will see the plan — research, script, scenes, assets, voice, render — and
-              can change or cancel it before anything runs.
-            </p>
-          </div>
+    <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center gap-8 py-8">
+      <div className="space-y-6 text-center">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">What should we make?</h1>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Pipeline</Label>
-              <Select value={pipelineId} onValueChange={setPipelineId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Choose for me</SelectItem>
-                  {pipelines.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {pipelineId === "auto"
-                  ? "Picked from your wording. You can change it before approving."
-                  : pipelines.find((p) => p.id === pipelineId)?.description}
-              </p>
-            </div>
+        <Textarea
+          value={request}
+          onChange={(e) => setRequest(e.target.value)}
+          rows={3}
+          disabled={isWorking}
+          className="resize-none rounded-2xl border-2 p-5 text-center text-lg shadow-sm focus-visible:ring-2"
+          placeholder="A brave little turtle who learns to swim"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && request.trim().length >= 8) submit();
+          }}
+        />
 
-            <div className="space-y-2">
-              <Label>Cost policy</Label>
-              <Select value={costPolicy} onValueChange={setCostPolicy}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.keys(COST_POLICY_HELP).map((policy) => (
-                    <SelectItem key={policy} value={policy}>{policy.replace(/_/g, " ").toLowerCase()}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{COST_POLICY_HELP[costPolicy]}</p>
-            </div>
+        <Button size="lg" className="h-16 w-full text-lg" onClick={submit} disabled={request.trim().length < 8 || isWorking}>
+          {isWorking ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wand2 className="h-5 w-5" />}
+          {isWorking ? "Getting started…" : "Make it"}
+        </Button>
 
-            <div className="space-y-2">
-              <Label htmlFor="language">Language (optional)</Label>
-              <Input id="language" value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="hi-IN" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duration in seconds (optional)</Label>
-              <Input
-                id="duration"
-                type="number"
-                min={5}
-                max={3600}
-                value={durationSeconds}
-                onChange={(e) => setDurationSeconds(e.target.value)}
-                placeholder="60"
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {planningFailed && (
-            <p className="text-sm text-destructive">
-              Planning failed: {job?.error ?? "unknown error"}. Under a zero-cost policy this usually means no free
-              provider is configured for text generation.
-            </p>
-          )}
-
-          <Button onClick={submit} disabled={request.trim().length < 8 || isPlanning}>
-            {isPlanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-            {isPlanning ? "Planning…" : "Plan this video"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Recent plans</h2>
-        {recentPlans.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No plans yet.</p>
-        ) : (
-          recentPlans.map((plan) => <PlanCard key={plan.id} plan={plan} />)
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {planningFailed && (
+          <p className="text-sm text-destructive">
+            {job?.error ?? "That didn't work. Try describing it a different way."}
+          </p>
         )}
-      </section>
+      </div>
+
+      {draftPlans.length > 0 && (
+        <div className="space-y-2">
+          {draftPlans.map((plan) => (
+            <DraftPlanRow key={plan.id} plan={plan} />
+          ))}
+        </div>
+      )}
+
+      {runningPlans.length > 0 && (
+        <div className="space-y-1">
+          {runningPlans.map((plan) => (
+            <Link
+              key={plan.id}
+              href={`/projects/${plan.projectId}`}
+              className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <span className="truncate">{plan.objective}</span>
+              <span className="shrink-0 text-xs">{plan.status === "completed" ? "done" : "making…"}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <details
+        className="mx-auto w-full max-w-md"
+        open={showOptions}
+        onToggle={(e) => setShowOptions((e.currentTarget as HTMLDetailsElement).open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          More options
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOptions ? "rotate-180" : ""}`} />
+        </summary>
+
+        <div className="mt-4 grid gap-4 rounded-xl border border-border p-4 sm:grid-cols-2">
+          <label className="col-span-full flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-border"
+              checked={!autoStart}
+              onChange={(e) => setAutoStart(!e.target.checked)}
+            />
+            Review the plan before it starts
+          </label>
+
+          <Field label="Style">
+            <Select value={pipelineId} onValueChange={setPipelineId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Choose for me</SelectItem>
+                {pipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field label="Spending">
+            <Select value={costPolicy} onValueChange={setCostPolicy}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ZERO_COST">Free only</SelectItem>
+                <SelectItem value="FREE_PREFERRED">Free when possible</SelectItem>
+                <SelectItem value="BALANCED">Balanced</SelectItem>
+                <SelectItem value="BEST_QUALITY">Best quality</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field label="Language">
+            <Input value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="English" />
+          </Field>
+
+          <Field label="Length">
+            <Input
+              type="number"
+              min={5}
+              max={3600}
+              value={durationSeconds}
+              onChange={(e) => setDurationSeconds(e.target.value)}
+              placeholder="60 seconds"
+            />
+          </Field>
+        </div>
+      </details>
     </div>
   );
 }
 
-function PlanCard({ plan }: { plan: PlanSummary }) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+/** A plan someone asked to review. Two buttons: make it, or bin it. */
+function DraftPlanRow({ plan }: { plan: PlanSummary }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -214,77 +280,27 @@ function PlanCard({ plan }: { plan: PlanSummary }) {
         setError(body.error ?? "That did not work.");
         return;
       }
-      router.refresh();
+      if (method === "POST" && body.projectId) router.push(`/projects/${body.projectId}`);
+      else router.refresh();
     });
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-sm font-medium">{plan.objective}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant={plan.status === "draft" ? "secondary" : "outline"}>{plan.status}</Badge>
-            <Badge variant="outline">{plan.costPolicy.replace(/_/g, " ").toLowerCase()}</Badge>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">{plan.request}</p>
-
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
-          <Stat label="Pipeline" value={plan.pipelineId.replace(/_/g, " ")} />
-          <Stat label="Language" value={plan.language} />
-          <Stat label="Duration" value={`${plan.durationSeconds}s`} />
-          <Stat label="Scenes" value={String(plan.sceneCount)} />
-        </dl>
-
-        {plan.stages.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {plan.stages.map((stage) => (
-              <span key={stage} className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{stage}</span>
-            ))}
-          </div>
-        )}
-
-        {plan.notes.length > 0 && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-            <p className="mb-1 font-medium">The director adjusted this plan:</p>
-            <ul className="list-inside list-disc space-y-0.5 text-muted-foreground">
-              {plan.notes.map((note) => <li key={note}>{note}</li>)}
-            </ul>
-          </div>
-        )}
-
-        {error && <p className="text-xs text-destructive">{error}</p>}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {plan.status === "draft" && (
-            <>
-              <Button size="sm" disabled={isPending} onClick={() => act("POST")}>
-                {isPending && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                Approve and start
-              </Button>
-              <Button size="sm" variant="ghost" disabled={isPending} onClick={() => act("DELETE")}>
-                Discard
-              </Button>
-            </>
-          )}
-          {plan.projectId && (
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/projects/${plan.projectId}`}>Open project</Link>
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+    <div className="rounded-xl border border-border p-4">
+      <p className="font-medium">{plan.objective}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {plan.sceneCount} scenes · {plan.durationSeconds}s · {plan.language}
+      </p>
+      {plan.notes.length > 0 && <p className="mt-2 text-xs text-muted-foreground">{plan.notes[0]}</p>}
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      <div className="mt-3 flex items-center gap-2">
+        <Button size="sm" disabled={isPending} onClick={() => act("POST")}>
+          {isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+          Make it
+        </Button>
+        <Button size="sm" variant="ghost" disabled={isPending} onClick={() => act("DELETE")}>
+          No thanks
+        </Button>
+      </div>
     </div>
   );
 }
