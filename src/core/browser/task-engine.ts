@@ -181,6 +181,20 @@ export class DefaultTaskEngine implements TaskEngine {
       const result = await pipeline.run(page, step);
 
       if (!result.success) {
+        if (step.optional) {
+          // Recorded, not fatal — see TaskStep.optional. The run continues to the next step, which
+          // on a well-built sequence is the check that decides whether skipping this actually
+          // mattered.
+          if (executionMonitor) {
+            await executionMonitor.record(runId, {
+              level: "warn",
+              message: `Optional step ${step.id} (${step.action}) did not succeed, continuing: ${result.error ?? "unknown reason"}`,
+            });
+          }
+          completedSteps = i + 1;
+          if (completedSteps < task.steps.length) await this.deps.stateEngine.transition(runId, "waiting", completedSteps);
+          continue;
+        }
         finalState = "failed";
         error = result.error;
         await this.transition(runId, "recovering");

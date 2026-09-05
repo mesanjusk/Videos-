@@ -1,5 +1,6 @@
 import type { Page, Locator } from "playwright";
 import type { SelectorStrategy, SelectorTarget } from "../shared";
+import { REF_ATTRIBUTE } from "../page-probe";
 
 export interface ResolvedSelector {
   locator: Locator;
@@ -25,6 +26,9 @@ export async function resolveTarget(
 ): Promise<ResolvedSelector> {
   const timeout = opts.timeout ?? 5000;
   const attempts: Array<{ strategy: SelectorStrategy; build: () => Locator | null }> = [
+    // A ref from a probe of this same page beats anything written in advance: it names the element
+    // that was actually seen, rather than describing one and hoping the description still matches.
+    { strategy: "ref", build: () => (target.ref ? page.locator(`[${REF_ATTRIBUTE}="${target.ref}"]`) : null) },
     { strategy: "css", build: () => (target.testId ? page.getByTestId(target.testId) : null) },
     { strategy: "css", build: () => (target.css ? page.locator(target.css) : null) },
     {

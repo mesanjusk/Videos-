@@ -4,7 +4,8 @@
  * The rule every default here follows: **a deployment that pulls this merge and changes no
  * environment variable must behave exactly as it did before.** Golden Rule 15. So every new
  * *integration* is off unless its service is configured, and every new *capability* defaults to
- * the behaviour that was already in place.
+ * the behaviour that was already in place. `browserFallback` is the one considered exception —
+ * the reasoning is written out at its default below, not hidden in a diff.
  *
  * A flag being on never means "this works" — it means "you may try". A provider whose flag is on
  * but whose URL or key is missing reports itself unavailable rather than throwing at import time
@@ -31,7 +32,10 @@ export interface FeatureFlags {
   ideogram: boolean;
   /** Offer a local image/TTS worker over HTTP (Easy Diffusion or anything speaking the same shape). */
   localAi: boolean;
-  /** Let a video stage divert to browser automation when no API route is available. */
+  /**
+   * Let a video stage drive the provider's website when it has no API. On by default — this is the
+   * route, not a fallback; see the rationale on the default below.
+   */
   browserFallback: boolean;
 }
 
@@ -52,10 +56,21 @@ export function getFeatureFlags(): FeatureFlags {
     ideogram: flag("ENABLE_IDEOGRAM", false),
     localAi: flag("ENABLE_LOCAL_AI", false),
 
-    // Off by default because it changes what an existing job does: a scene_video job that would
-    // have handed off to a human might instead drive a browser. That is a behaviour change, and
-    // behaviour changes are opt-in.
-    browserFallback: flag("ENABLE_BROWSER_FALLBACK", false),
+    // The one deliberate exception to the "changes nothing by default" rule at the top of this
+    // file, and it is worth stating why rather than quietly flipping it.
+    //
+    // Video generation is the step this product exists for, and Google Flow — the only provider
+    // that can do it — publishes no API. Off by default, every single video run stopped and waited
+    // for a person to copy a prompt into labs.google/flow, download the clip and upload it back.
+    // That is not a "fallback" being declined; it is the pipeline not running. The browser route is
+    // how this application generates video, so it is on.
+    //
+    // It still cannot do anything unless a Google account has a connected Flow browser session
+    // (modules/accounts/service.ts#findAccountWithFlowSession), and if the site run fails it lands
+    // in exactly the manual hand-off it would have gone to anyway — so the worst case with this on
+    // is the old behaviour, one queue hop later. Set ENABLE_BROWSER_FALLBACK=false to force the
+    // hand-off and never drive a browser.
+    browserFallback: flag("ENABLE_BROWSER_FALLBACK", true),
   };
 }
 

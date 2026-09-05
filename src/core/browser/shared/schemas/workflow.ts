@@ -12,6 +12,10 @@ export type RetryPolicy = z.infer<typeof retryPolicySchema>;
 // A "target" describes how to locate an element. All fields are optional and
 // tried in priority order by the selector resolver (see packages/browser).
 export const selectorTargetSchema = z.object({
+  // A ref handed out by a previous `probe_page` step (see core/browser/page-probe.ts). Tried before
+  // every other strategy: it addresses the exact element the probe reported, with no round trip
+  // through a description that could match a different one.
+  ref: z.string().optional(),
   css: z.string().optional(),
   xpath: z.string().optional(),
   role: z.string().optional(),

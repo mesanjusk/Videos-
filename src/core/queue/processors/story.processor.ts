@@ -7,6 +7,7 @@ import { getStoryProvider } from "@/core/ai/registry";
 import { createScenesFromStory } from "@/modules/scenes/service";
 import { resolveActiveTemplate } from "@/modules/prompt-templates/service";
 import { getProviderOverride } from "@/modules/settings/service";
+import { autoCastFromStory } from "@/core/production/auto-cast";
 
 /** PDF Step 1 — Write the Story. */
 export async function processStoryJob(bullJob: BullJob<BullJobData>) {
@@ -51,6 +52,25 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     // just assigns characters/backgrounds to what's already there.
     await createScenesFromStory(jobDoc.userId, jobDoc.projectId!.toString(), story.scenes);
 
-    return { title: story.title, sceneCount: story.scenes.length };
+    // Casting (PDF Steps 2-3) — full-automation projects only. The orchestrator refuses to start a
+    // scene until it has characters and a background, and the only thing that assigns those runs
+    // after a character/background image job completes. Without this the auto-chain never took its
+    // first step: the story landed, the scenes appeared, and the project sat at 20% forever waiting
+    // for a human to open the Characters page. See core/production/auto-cast.ts.
+    //
+    // "semi"/"manual" projects are untouched: there, choosing the cast *is* the user's job, and
+    // conjuring three characters they didn't ask for would be the wrong kind of helpful.
+    let cast: { characterIds: string[]; backgroundId: string | null; created: boolean } | undefined;
+    if (project.pipelineMode === "full") {
+      const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
+      cast = await autoCastFromStory(jobDoc.userId, jobDoc.projectId!.toString(), story, style);
+    }
+
+    return {
+      title: story.title,
+      sceneCount: story.scenes.length,
+      castCharacters: cast?.characterIds.length ?? 0,
+      castCreated: cast?.created ?? false,
+    };
   });
 }
