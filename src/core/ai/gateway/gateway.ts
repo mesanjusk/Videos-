@@ -8,8 +8,11 @@ import {
 import {
   PROVIDER_METADATA,
   isProviderConfigured,
+  describeUnavailability,
   type ProviderRuntimeDescriptor,
+  type SuppliedRequirements,
 } from "@/core/ai/provider-metadata";
+import { ProviderQuotaExceededError } from "@/core/ai/types";
 
 /**
  * The routing layer between business logic and any concrete AI provider.
@@ -47,6 +50,13 @@ export interface ResolveOptions {
   costPolicy?: string | null;
   /** Try this provider first if the policy permits it and it is configured. */
   preferredProviderId?: string | null;
+  /**
+   * Requirement keys the caller already holds a credential for, so they need not be in the
+   * environment — a resolved pooled Google account supplies `GEMINI_API_KEY`, for instance. Without
+   * this, a deployment that keeps its Gemini keys on connected accounts (which is the intended
+   * shape — see providers/google/gemini-client.ts) has no configured text provider at all.
+   */
+  suppliedRequirements?: SuppliedRequirements;
 }
 
 export interface ExecutionOutcome<T> {
@@ -69,13 +79,14 @@ export class AiGateway {
   constructor(private readonly catalogue: ProviderRuntimeDescriptor[] = PROVIDER_METADATA) {}
 
   /** Every candidate for a capability, with availability resolved. Used by System Health too. */
-  candidates(capability: string) {
+  candidates(capability: string, supplied: SuppliedRequirements = []) {
     return this.catalogue
       .filter((descriptor) => descriptor.capability === capability)
       .map((descriptor) => ({
         id: descriptor.id,
         cost: descriptor.cost,
-        available: isProviderConfigured(descriptor),
+        available: isProviderConfigured(descriptor, supplied),
+        unavailableReason: describeUnavailability(descriptor, supplied),
         descriptor,
       }));
   }
@@ -89,7 +100,8 @@ export class AiGateway {
    */
   resolve(capability: string, options: ResolveOptions = {}): GatewayResolution {
     const policy = resolveCostPolicy(options.costPolicy);
-    const ranked = rankProviders(policy, this.candidates(capability));
+    const supplied = options.suppliedRequirements ?? [];
+    const ranked = rankProviders(policy, this.candidates(capability, supplied));
 
     const ordered = [...ranked].sort(
       (a, b) => EXECUTION_PREFERENCE[a.descriptor.execution] - EXECUTION_PREFERENCE[b.descriptor.execution],
@@ -105,7 +117,7 @@ export class AiGateway {
       throw new NoPermittedProviderError(
         policy,
         capability,
-        this.candidates(capability).map((c) => ({ id: c.id, reason: checkProviderAllowed(policy, c).reason })),
+        this.candidates(capability, supplied).map((c) => ({ id: c.id, reason: checkProviderAllowed(policy, c).reason })),
       );
     }
 
@@ -129,14 +141,17 @@ export class AiGateway {
     work: (descriptor: ProviderRuntimeDescriptor) => Promise<T>,
   ): Promise<ExecutionOutcome<T>> {
     const resolution = this.resolve(capability, options);
+    const supplied = options.suppliedRequirements ?? [];
     const chain = [resolution.descriptor, ...resolution.fallbacks];
     const attempted: { providerId: string; error: string }[] = [];
+    const failures: unknown[] = [];
 
     for (const descriptor of chain) {
       const decision = checkProviderAllowed(resolution.policy, {
         id: descriptor.id,
         cost: descriptor.cost,
-        available: isProviderConfigured(descriptor),
+        available: isProviderConfigured(descriptor, supplied),
+        unavailableReason: describeUnavailability(descriptor, supplied),
       });
       if (!decision.allowed) {
         attempted.push({ providerId: descriptor.id, error: `skipped: ${decision.reason}` });
@@ -147,9 +162,17 @@ export class AiGateway {
         const result = await work(descriptor);
         return { result, providerId: descriptor.id, attempted, policy: resolution.policy };
       } catch (err) {
+        failures.push(err);
         attempted.push({ providerId: descriptor.id, error: err instanceof Error ? err.message : String(err) });
       }
     }
+
+    // A quota failure survives the aggregation. The queue's account rotation keys off the *type*
+    // of this error (processors/helpers.ts marks the pooled account exhausted and lets BullMQ
+    // retry against another one), and flattening it into a plain Error would silently disable that
+    // for every caller routed through the gateway.
+    const quota = failures.find((err): err is ProviderQuotaExceededError => err instanceof ProviderQuotaExceededError);
+    if (quota) throw quota;
 
     throw new Error(
       `Every provider for "${capability}" failed under cost policy ${resolution.policy}: ` +

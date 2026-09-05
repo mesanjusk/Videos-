@@ -10,9 +10,9 @@ codebase cannot verify the cost, and it behaves exactly like `paid` everywhere. 
 
 | Provider | Capability | Local/Cloud | Free/Paid | API | Browser | GPU | ZERO_COST | Flag | Requires | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Gemini (text) | story / planning | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
-| Gemini (image) | image | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
-| Gemini (TTS) | voice | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
+| Gemini (text) | story / planning | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | a connected Google account, or `GEMINI_API_KEY` | Working |
+| Gemini (image) | image | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | a connected Google account, or `GEMINI_API_KEY` | Working |
+| Gemini (TTS) | voice | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | a connected Google account, or `GEMINI_API_KEY` | Working |
 | Google Flow (browser) | video | Browser | Unknown | — | ✅ | — | ❌ | `ENABLE_BROWSER_FALLBACK` (**on** by default) | Chromium + a connected Flow session | The default video route. **Selectors unverified** — see below |
 | Google Flow (manual) | video | Manual | Unknown | — | — | — | ❌ | — | none | The fallback when the browser run fails — hands a prompt to a person |
 | Ideogram | image | Cloud | Paid | ✅ | — | — | ❌ | `ENABLE_IDEOGRAM` | `IDEOGRAM_API_KEY` | Implemented, untested against the live API |

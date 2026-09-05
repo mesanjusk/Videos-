@@ -1,4 +1,5 @@
 import { generateText, parseJsonResponse } from "@/core/ai/gateway/text";
+import type { GenerationAccountContext } from "@/core/ai/types";
 import { resolveCostPolicy, type CostPolicy } from "@/core/cost";
 import { inferPipeline, getPipeline } from "./pipelines";
 import { productionPlanSchema, type PipelineDefinition, type ProductionPlan, type ProductionStage } from "./types";
@@ -26,6 +27,9 @@ export interface DirectorRequest {
   costPolicy?: string | null;
   /** Stages the user switched off in the UI. */
   skipStages?: ProductionStage[];
+  /** The pooled Google account this run should bill against, resolved by the caller. Planning is a
+   *  model call like any other, so it goes through the same account pool as every other stage. */
+  account?: GenerationAccountContext;
 }
 
 export interface DirectorResult {
@@ -111,6 +115,7 @@ export async function directProduction(request: DirectorRequest): Promise<Direct
     json: true,
     temperature: 0.7,
     costPolicy: request.costPolicy,
+    account: request.account,
   });
 
   const raw = parseJsonResponse<unknown>(response.text);
