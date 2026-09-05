@@ -9,9 +9,14 @@ Formed by merging two projects: the AI Video Studio (this repo) and Browser Auto
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the merged shape.
 
 Workflow logic follows `COMPLETE_AI_CARTOON_WORKFLOW_2026.pdf`; implementation technology follows the
-approved stack (see `ARCHITECTURE.md` for the full rationale, especially why video generation is
-architected as a **manual hand-off** through Google Flow rather than an API call — Flow has no public
-API — and why there's no music-*generation* provider — none of the brief's allowed services offer one).
+approved stack (see `ARCHITECTURE.md` for the full rationale, and why there's no music-*generation*
+provider — none of the brief's allowed services offer one).
+
+Google Flow, which makes the video, has **no public API**. So the browser automation engine drives
+its website instead: it opens Flow in a real signed-in session, uploads the character references,
+enters the prompt, waits for the render and downloads the MP4 straight back into the pipeline. That
+is the default route, not a fallback — see [`docs/BROWSER-AUTOMATION.md`](docs/BROWSER-AUTOMATION.md).
+A person only ever has to step in if the site run genuinely fails.
 
 ## Status
 
@@ -47,12 +52,21 @@ to run the job queue (Vercel's serverless tick vs. the standalone `worker.ts`).
 `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` are all clean against the
 current code.
 
-## Create Video
+## Making a video
 
-`/create` takes one line — "Create a 60-second Hindi Instagram Reel explaining the logic behind
-Sehra in Indian weddings" — and returns a plan: research questions, script beats, storyboard,
-characters, assets, voice, rendering and quality requirements. Nothing is generated and nothing is
-spent until you approve it. See [`docs/VIDEO-PIPELINE.md`](docs/VIDEO-PIPELINE.md).
+One box, one button. `/create` takes a line — "A brave little turtle who learns to swim", or
+"a 60-second Hindi Reel explaining the logic behind Sehra in Indian weddings" — and everything
+after that happens on its own: story, cast, backgrounds, scene images, the Flow video run, voice,
+the render and the thumbnail. The project page shows what is happening and, at the end, plays the
+video with a download button under it.
+
+Pipeline, spending policy, language and length are under `More options` with sensible defaults, and
+`Review the plan before it starts` restores the two-step approve-first flow. See
+[`docs/VIDEO-PIPELINE.md`](docs/VIDEO-PIPELINE.md).
+
+Before the first run, `/accounts` needs two things once: a Google account with a Gemini key, and
+that account's Google Flow browser session. The second is what lets video generation finish without
+you.
 
 ## Cost policy
 
