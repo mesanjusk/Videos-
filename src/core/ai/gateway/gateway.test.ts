@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AiGateway } from "./gateway";
 import { NoPermittedProviderError } from "@/core/cost";
+import { ProviderQuotaExceededError } from "@/core/ai/types";
 import { freeCostPolicy, paidCostPolicy, unknownCostPolicy } from "@/core/cost";
 import type { ProviderRuntimeDescriptor } from "@/core/ai/provider-metadata";
 
@@ -66,6 +67,31 @@ describe("AiGateway.resolve", () => {
     const needsKey: ProviderRuntimeDescriptor = { ...cloudPaid, id: "needs-key", requirements: ["A_KEY_NOBODY_SET"] };
     expect(new AiGateway([needsKey, localFree]).resolve("image").descriptor.id).toBe("local-image");
   });
+
+  it("accepts a requirement the caller supplies at runtime", () => {
+    // A pooled Google account's key is a real Gemini credential that is deliberately not in the
+    // environment. Without this, a deployment that keeps its keys on connected accounts has no
+    // text provider at all — which is exactly how a Director run failed with "no provider".
+    const needsKey: ProviderRuntimeDescriptor = { ...cloudPaid, id: "needs-key", requirements: ["A_KEY_NOBODY_SET"] };
+    const gateway = new AiGateway([needsKey]);
+
+    expect(() => gateway.resolve("image")).toThrow(NoPermittedProviderError);
+    expect(gateway.resolve("image", { suppliedRequirements: ["A_KEY_NOBODY_SET"] }).descriptor.id).toBe("needs-key");
+  });
+
+  it("says what to configure rather than only that nothing is configured", () => {
+    const needsKey: ProviderRuntimeDescriptor = { ...cloudPaid, id: "needs-key", requirements: ["A_KEY_NOBODY_SET"] };
+    const hinted: ProviderRuntimeDescriptor = {
+      ...cloudPaid,
+      id: "hinted",
+      requirements: ["ANOTHER_KEY_NOBODY_SET"],
+      configurationHint: "connect an account, or set ANOTHER_KEY_NOBODY_SET",
+    };
+
+    expect(() => new AiGateway([needsKey, hinted]).resolve("image")).toThrow(
+      /needs-key \(set A_KEY_NOBODY_SET\).*hinted \(connect an account, or set ANOTHER_KEY_NOBODY_SET\)/,
+    );
+  });
 });
 
 describe("AiGateway.execute", () => {
@@ -111,6 +137,19 @@ describe("AiGateway.execute", () => {
     ).rejects.toThrow(NoPermittedProviderError);
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserves a quota failure instead of flattening it into the aggregate error", async () => {
+    // The queue's account rotation keys off this error *type* (processors/helpers.ts marks the
+    // pooled account exhausted and lets BullMQ retry against another). Wrapping it in a plain
+    // Error would silently switch that off for everything routed through the gateway.
+    const gateway = new AiGateway([localFree]);
+
+    await expect(
+      gateway.execute("image", {}, async () => {
+        throw new ProviderQuotaExceededError("local-image");
+      }),
+    ).rejects.toBeInstanceOf(ProviderQuotaExceededError);
   });
 
   it("reports which provider actually served the work", async () => {

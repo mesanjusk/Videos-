@@ -1,4 +1,6 @@
 import { getGeminiClient, wrapGeminiError } from "@/core/ai/providers/google/gemini-client";
+import { GEMINI_REQUIREMENT } from "@/core/ai/provider-metadata";
+import type { GenerationAccountContext } from "@/core/ai/types";
 import { OmniRouteClient } from "./omniroute";
 import { aiGateway, type ExecutionOutcome } from "./gateway";
 
@@ -24,6 +26,16 @@ export interface TextRequest {
   json?: boolean;
   costPolicy?: string | null;
   preferredProviderId?: string | null;
+  /**
+   * A pooled Google account resolved by the caller (modules/accounts#resolveGenerationAccount).
+   *
+   * Every other Gemini path in this codebase takes one; this route did not, so it could only ever
+   * authenticate from `GEMINI_API_KEY` — the local-dev fallback. On a deployment that keeps its
+   * keys on connected accounts, that made Gemini unusable *and* unavailable: the gateway rules a
+   * provider out on its missing requirement, so a Director run failed with "no provider for story"
+   * while the story stage, which does pass an account, worked fine.
+   */
+  account?: GenerationAccountContext;
 }
 
 export interface TextResponse {
@@ -35,7 +47,12 @@ export interface TextResponse {
 export async function generateText(request: TextRequest): Promise<TextResponse> {
   const outcome: ExecutionOutcome<{ text: string; model?: string }> = await aiGateway.execute(
     "story",
-    { costPolicy: request.costPolicy, preferredProviderId: request.preferredProviderId },
+    {
+      costPolicy: request.costPolicy,
+      preferredProviderId: request.preferredProviderId,
+      // The account's own key stands in for the env var Gemini declares as its requirement.
+      suppliedRequirements: request.account?.apiKey ? [GEMINI_REQUIREMENT] : [],
+    },
     async (descriptor) => {
       switch (descriptor.id) {
         case "local-llm":
@@ -130,7 +147,7 @@ async function callOpenAiCompatible(
 }
 
 async function callGemini(request: TextRequest): Promise<{ text: string; model?: string }> {
-  const client = getGeminiClient();
+  const client = getGeminiClient(request.account);
   const model = process.env.GEMINI_TEXT_MODEL ?? "gemini-3.6-flash";
   try {
     const response = await client.models.generateContent({

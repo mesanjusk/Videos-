@@ -1,5 +1,5 @@
 import type { AiCapability } from "./types";
-import { getFeatureFlags } from "@/core/config/flags";
+import { getFeatureFlags, FLAG_ENV_VARS } from "@/core/config/flags";
 import {
   freeCostPolicy,
   meteredFreeTierCostPolicy,
@@ -47,19 +47,74 @@ export interface ProviderRuntimeDescriptor {
   /** Ordered provider ids to try if this one fails. Never crosses from free to paid on its own —
    *  the gateway re-checks the cost policy for each fallback before using it. */
   fallbacks?: string[];
+  /** What an operator should actually do to make this provider usable, when env vars alone don't
+   *  tell the whole story (Gemini's real credential is a connected account, not a key in the env). */
+  configurationHint?: string;
   notes?: string;
 }
 
-export function isProviderConfigured(descriptor: ProviderRuntimeDescriptor): boolean {
+/**
+ * Requirement keys a caller has already satisfied at runtime, so they don't have to be in the
+ * environment.
+ *
+ * The case this exists for: Gemini's credential in a real deployment is the encrypted API key on a
+ * connected Google account (modules/accounts), and `GEMINI_API_KEY` is only the local-dev fallback
+ * — see providers/google/gemini-client.ts. A caller that has resolved a pooled account holds a
+ * usable Gemini credential, and without a way to say so the gateway would rule Gemini out on an
+ * env var that deployment deliberately doesn't set.
+ */
+export type SuppliedRequirements = readonly string[];
+
+/** The requirement key a resolved Google account credential stands in for. */
+export const GEMINI_REQUIREMENT = "GEMINI_API_KEY";
+
+function isRequirementSatisfied(key: string, supplied: SuppliedRequirements): boolean {
+  return Boolean(process.env[key]) || supplied.includes(key);
+}
+
+export function isProviderConfigured(
+  descriptor: ProviderRuntimeDescriptor,
+  supplied: SuppliedRequirements = [],
+): boolean {
   if (descriptor.flag && !getFeatureFlags()[descriptor.flag]) return false;
-  return descriptor.requirements.every((key) => Boolean(process.env[key]));
+  return descriptor.requirements.every((key) => isRequirementSatisfied(key, supplied));
 }
 
-export function missingRequirements(descriptor: ProviderRuntimeDescriptor): string[] {
-  return descriptor.requirements.filter((key) => !process.env[key]);
+export function missingRequirements(
+  descriptor: ProviderRuntimeDescriptor,
+  supplied: SuppliedRequirements = [],
+): string[] {
+  return descriptor.requirements.filter((key) => !isRequirementSatisfied(key, supplied));
 }
 
-const GEMINI_KEYS = ["GEMINI_API_KEY"];
+/**
+ * Why this provider cannot serve a call, phrased as what to change.
+ *
+ * "not configured or unreachable" is true and useless: it names nothing an operator can act on.
+ * This is what ends up in `NoPermittedProviderError`, which is the message a failed job shows, so
+ * it names the flag and the variables instead.
+ */
+export function describeUnavailability(
+  descriptor: ProviderRuntimeDescriptor,
+  supplied: SuppliedRequirements = [],
+): string {
+  const steps: string[] = [];
+  if (descriptor.flag && !getFeatureFlags()[descriptor.flag]) {
+    steps.push(`set ${FLAG_ENV_VARS[descriptor.flag]}=true`);
+  }
+
+  const missing = missingRequirements(descriptor, supplied);
+  if (missing.length) {
+    steps.push(descriptor.configurationHint ?? `set ${missing.join(" and ")}`);
+  }
+
+  return steps.length ? steps.join(", then ") : "not configured or unreachable";
+}
+
+const GEMINI_KEYS = [GEMINI_REQUIREMENT];
+
+/** Gemini's credential is a connected account first; the env key is the local-dev fallback. */
+const GEMINI_HINT = "connect a Google account in Account Manager, or set GEMINI_API_KEY";
 
 export const PROVIDER_METADATA: ProviderRuntimeDescriptor[] = [
   // ── Gemini ────────────────────────────────────────────────────────────────────────────────
@@ -72,6 +127,7 @@ export const PROVIDER_METADATA: ProviderRuntimeDescriptor[] = [
     execution: "cloud-api",
     cost: meteredFreeTierCostPolicy({ rationale: "Google AI Studio API key; free allowance then metered." }),
     requirements: GEMINI_KEYS,
+    configurationHint: GEMINI_HINT,
     fallbacks: ["omniroute", "local-llm"],
   },
   {
@@ -81,6 +137,7 @@ export const PROVIDER_METADATA: ProviderRuntimeDescriptor[] = [
     execution: "cloud-api",
     cost: meteredFreeTierCostPolicy({ rationale: "Google AI Studio API key; free allowance then metered." }),
     requirements: GEMINI_KEYS,
+    configurationHint: GEMINI_HINT,
     fallbacks: ["local-image", "ideogram"],
   },
   {
@@ -90,6 +147,7 @@ export const PROVIDER_METADATA: ProviderRuntimeDescriptor[] = [
     execution: "cloud-api",
     cost: meteredFreeTierCostPolicy({ rationale: "Google AI Studio API key; free allowance then metered." }),
     requirements: GEMINI_KEYS,
+    configurationHint: GEMINI_HINT,
     fallbacks: ["voicebox"],
   },
 

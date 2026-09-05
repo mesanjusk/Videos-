@@ -39,6 +39,9 @@ export interface CostPolicyCandidate {
   cost: ProviderCostPolicy;
   /** Whether the provider is configured and reachable at all. */
   available: boolean;
+  /** What to change to make it available, when it isn't. Ends up in `NoPermittedProviderError`,
+   *  so a caller that knows the specifics ("set LOCAL_AI_LLM_URL") should say so here. */
+  unavailableReason?: string;
 }
 
 export interface PermissionDecision {
@@ -73,7 +76,7 @@ export function resolveCostPolicy(requested?: string | null): CostPolicy {
  */
 export function checkProviderAllowed(policy: CostPolicy, candidate: CostPolicyCandidate): PermissionDecision {
   if (!candidate.available) {
-    return { allowed: false, reason: "not configured or unreachable" };
+    return { allowed: false, reason: candidate.unavailableReason ?? "not configured or unreachable" };
   }
 
   if (policy === "ZERO_COST") {

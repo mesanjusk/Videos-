@@ -39,22 +39,37 @@ export interface FeatureFlags {
   browserFallback: boolean;
 }
 
+/**
+ * The environment variable behind each flag. Named here rather than inline below so a message that
+ * has to tell an operator what to switch on ("set ENABLE_LOCAL_AI=true") can name the same variable
+ * this file reads, instead of a second copy of the string that can drift from it.
+ */
+export const FLAG_ENV_VARS = {
+  zeroCostMode: "ENABLE_ZERO_COST_MODE",
+  omniRoute: "ENABLE_OMNIROUTE",
+  voicebox: "ENABLE_VOICEBOX",
+  hyperframes: "ENABLE_HYPERFRAMES",
+  ideogram: "ENABLE_IDEOGRAM",
+  localAi: "ENABLE_LOCAL_AI",
+  browserFallback: "ENABLE_BROWSER_FALLBACK",
+} as const satisfies Record<keyof FeatureFlags, string>;
+
 export function getFeatureFlags(): FeatureFlags {
   return {
     // Defaults true, and that is still a safe default: selecting ZERO_COST is opt-in per run or
     // per production profile, so a deployment that never selects it is unaffected. Flagging the
     // *availability* off by default would only mean an operator who wants the safety rail has to
     // find a second switch first. Set ENABLE_ZERO_COST_MODE=false to forbid it outright.
-    zeroCostMode: flag("ENABLE_ZERO_COST_MODE", true),
+    zeroCostMode: flag(FLAG_ENV_VARS.zeroCostMode, true),
 
     // These four each front an external service this deployment may not have. Off by default —
     // turning one on without configuring it changes nothing except that System Health starts
     // reporting it as "enabled, not configured".
-    omniRoute: flag("ENABLE_OMNIROUTE", false),
-    voicebox: flag("ENABLE_VOICEBOX", false),
-    hyperframes: flag("ENABLE_HYPERFRAMES", false),
-    ideogram: flag("ENABLE_IDEOGRAM", false),
-    localAi: flag("ENABLE_LOCAL_AI", false),
+    omniRoute: flag(FLAG_ENV_VARS.omniRoute, false),
+    voicebox: flag(FLAG_ENV_VARS.voicebox, false),
+    hyperframes: flag(FLAG_ENV_VARS.hyperframes, false),
+    ideogram: flag(FLAG_ENV_VARS.ideogram, false),
+    localAi: flag(FLAG_ENV_VARS.localAi, false),
 
     // The one deliberate exception to the "changes nothing by default" rule at the top of this
     // file, and it is worth stating why rather than quietly flipping it.
@@ -70,7 +85,7 @@ export function getFeatureFlags(): FeatureFlags {
     // in exactly the manual hand-off it would have gone to anyway — so the worst case with this on
     // is the old behaviour, one queue hop later. Set ENABLE_BROWSER_FALLBACK=false to force the
     // hand-off and never drive a browser.
-    browserFallback: flag("ENABLE_BROWSER_FALLBACK", true),
+    browserFallback: flag(FLAG_ENV_VARS.browserFallback, true),
   };
 }
 

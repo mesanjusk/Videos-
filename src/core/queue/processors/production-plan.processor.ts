@@ -3,6 +3,8 @@ import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./help
 import { connectToDatabase } from "@/core/db/mongoose";
 import { directProduction } from "@/core/production/director";
 import { ProductionPlanModel } from "@/modules/production-plans/models/ProductionPlan";
+import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { recordAccountUsage } from "@/modules/accounts/selector";
 import type { ProductionStage } from "@/core/production/types";
 
 /**
@@ -31,6 +33,17 @@ export async function processProductionPlanJob(bullJob: BullJob<BullJobData>): P
     };
     if (!payload.request) throw new Error("production_plan job is missing payload.request");
 
+    // Planning is a model call, so it uses the pooled Google accounts like every other stage. Not
+    // fatal when there is none: a deployment may run planning on a local LLM, on OmniRoute, or on
+    // a `GEMINI_API_KEY` in the environment, and the gateway is what decides — it will say which
+    // of those to configure if none of them is. Recording the account on the job is what lets
+    // withJobLifecycle mark it exhausted on a quota error and retry against the next one.
+    const account = await resolveGenerationAccount(jobDoc.userId).catch(() => null);
+    if (account) {
+      jobDoc.set("googleAccountId", account.accountId);
+      await jobDoc.save();
+    }
+
     const result = await directProduction({
       request: payload.request,
       pipelineId: payload.pipelineId,
@@ -39,7 +52,10 @@ export async function processProductionPlanJob(bullJob: BullJob<BullJobData>): P
       aspectRatio: payload.aspectRatio,
       costPolicy: payload.costPolicy,
       skipStages: payload.skipStages,
+      account: account?.context,
     });
+
+    if (account && result.providerId === "gemini") await recordAccountUsage(account.accountId);
 
     const doc = await ProductionPlanModel.create({
       userId: jobDoc.userId,
