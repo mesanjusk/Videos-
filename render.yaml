@@ -80,8 +80,11 @@ services:
         value: "false"
       - key: ENABLE_LOCAL_AI
         value: "false"
+      # ON. This is the host that can actually do it — Chromium is installed above, and the whole
+      # reason a separate always-on worker exists is that Playwright cannot run in a serverless
+      # function. Leaving it off here disables video generation on the only process capable of it.
       - key: ENABLE_BROWSER_FALLBACK
-        value: "false"
+        value: "true"
       - key: WORKER_CONCURRENCY
         value: "2"
       - key: PLAYWRIGHT_HEADLESS

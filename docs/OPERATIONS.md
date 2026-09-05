@@ -135,7 +135,7 @@ ENABLE_VOICEBOX=false
 ENABLE_HYPERFRAMES=false
 ENABLE_IDEOGRAM=false
 ENABLE_LOCAL_AI=false
-ENABLE_BROWSER_FALLBACK=false
+ENABLE_BROWSER_FALLBACK=true
 ```
 
 > **These must match between Vercel and Render.** The app is what shows a user their options; the
@@ -333,13 +333,17 @@ automatically instead.
 
 ### The manual hand-off
 
-When a video or lip-sync stage has no API route, the scene parks with a prompt for you: open the
-provider's site, paste the prompt, generate, download, upload the result back. The pipeline resumes
-automatically.
+Video generation drives Google Flow's website, because Flow has no API. That needs two things: the
+worker running (Playwright cannot run on Vercel) and a Google account with a connected Flow browser
+session. Given both, a scene goes from prompt to downloaded MP4 without you.
 
-Enable `ENABLE_BROWSER_FALLBACK` (plus a connected Flow session) and the system will try to drive
-the site itself before asking you. If the site fails, it falls back to asking you anyway — so the
-worst case is the same as today.
+Missing either, the scene parks with a prompt for you instead: open the site, paste the prompt,
+generate, download, upload the result back — and the pipeline resumes automatically. The same
+hand-off is what happens if the site run fails, so the worst case is always "you do it yourself",
+never a lost job.
+
+Lip-sync has no automatic provider at all and is skipped rather than parked — see
+[PROVIDER-MATRIX.md](./PROVIDER-MATRIX.md). Run it by hand on a scene if you want it.
 
 ---
 

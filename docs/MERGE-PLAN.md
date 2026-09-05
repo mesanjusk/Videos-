@@ -195,7 +195,7 @@ and changes **no** environment variables behaves exactly as it does today.
 | `ENABLE_IDEOGRAM` | `false` | provider reports unavailable |
 | `ENABLE_HYPERFRAMES` | `false` | renderer registry contains FFmpeg only |
 | `ENABLE_LOCAL_AI` | `false` | local providers unavailable |
-| `ENABLE_BROWSER_FALLBACK` | `false` | `scene_video` never diverts to browser automation |
+| `ENABLE_BROWSER_FALLBACK` | `false` at merge time; **now `true`** | `scene_video` diverts to browser automation, which is how video is generated at all — see docs/BROWSER-AUTOMATION.md |
 | `ENABLE_WORKFLOW_AUTOMATION` | `true` | B's browser automation UI/API (A already ships a browser-automation page; keeping it on preserves current behaviour) |
 
 A provider whose flag is off, or whose required env var is missing, must report **unavailable** —
