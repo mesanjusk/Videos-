@@ -7,6 +7,8 @@ import type { ActionEngine } from "@/core/browser/action-engine";
 import type { BrowserTask, TaskStep } from "@/core/browser/types";
 import type { RecoveryAction, RecoveryContext } from "@/core/browser/recovery-engine";
 import { FLOW_TIMEOUTS_MS } from "./selectors";
+import { probePage } from "@/core/browser/page-probe";
+import { classifyFlowScreen, TERMINAL_SCREENS, type FlowScreen } from "./state";
 
 interface FlowTaskMetadata {
   promptText: string;
@@ -162,16 +164,68 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
         await engine.sleep(typeof params.ms === "number" ? params.ms : 1000);
         return;
       case "screenshot": {
-        const path = await engine.captureScreenshot(page);
+        const path = await engine.captureScreenshot(page, typeof params.name === "string" ? params.name : undefined);
         return { screenshotPath: path };
       }
       case "capture_html":
         return { html: await engine.captureHtml(page) };
       case "capture_dom":
         return { dom: await engine.captureDom(page) };
+      case "probe_page": {
+        // Reads what is genuinely on the page and stamps a ref on each control. Handed to the
+        // ExecutionMonitor by TaskEngine, so a run that later fails can be diagnosed against the
+        // page as it actually was, not against the selector file's idea of it.
+        const probe = await probePage(page, typeof params.limit === "number" ? params.limit : undefined);
+        return { probe: probe as unknown as Record<string, unknown> };
+      }
+      case "wait_for_state":
+        return { screen: await this.waitForScreen(page, step) };
       default:
         throw new Error(`Unsupported action for google-flow: ${step.action}`);
     }
+  }
+
+  /** Flow's own screens, so a `wait_for_state` step can wait on a meaning. See ./state.ts. */
+  async classifyState(page: Page): Promise<string> {
+    return classifyFlowScreen(page);
+  }
+
+  /**
+   * Polls until the page reaches one of the screens the step is waiting for.
+   *
+   * Three outcomes, and the difference between them is the whole point of doing it this way:
+   * the wanted screen (return, carry on), a screen a run can never proceed from — signed out, a
+   * human-verification challenge, Flow's own error state — which fails *immediately* with the
+   * reason instead of burning the full timeout, and the timeout itself, which reports the screen it
+   * was actually looking at when it gave up rather than the name of a selector.
+   */
+  private async waitForScreen(page: Page, step: TaskStep): Promise<FlowScreen> {
+    const wanted = (Array.isArray(step.params.states) ? step.params.states : [step.params.state])
+      .filter((s): s is string => typeof s === "string" && s.length > 0)
+      .map((s) => s as FlowScreen);
+    if (wanted.length === 0) throw new Error(`Step ${step.id} (wait_for_state) needs "state" or "states" in params`);
+
+    const timeoutMs = step.timeoutMs ?? FLOW_TIMEOUTS_MS.render;
+    const pollMs = typeof step.params.pollMs === "number" ? step.params.pollMs : 2000;
+    const deadline = Date.now() + timeoutMs;
+    let screen: FlowScreen = "UNKNOWN";
+
+    while (Date.now() < deadline) {
+      screen = await classifyFlowScreen(page);
+      if (wanted.includes(screen)) return screen;
+
+      const blocked = TERMINAL_SCREENS[screen];
+      // Only when the step wasn't itself waiting for that screen — a run may legitimately wait for
+      // SIGNED_OUT to confirm a sign-out happened.
+      if (blocked) throw new Error(blocked);
+
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    throw new Error(
+      `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for Google Flow to reach ${wanted.join(" or ")}; ` +
+        `it is showing ${screen}`,
+    );
   }
 
   async verifyResult(page: Page, step: TaskStep): Promise<boolean> {

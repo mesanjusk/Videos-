@@ -105,6 +105,7 @@ export const AGENT_TOOLS = [
 export type AgentTool = (typeof AGENT_TOOLS)[number];
 
 export const SELECTOR_STRATEGIES = [
+  "ref",
   "css",
   "role",
   "text",

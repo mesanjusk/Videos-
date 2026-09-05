@@ -13,8 +13,8 @@ codebase cannot verify the cost, and it behaves exactly like `paid` everywhere. 
 | Gemini (text) | story / planning | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
 | Gemini (image) | image | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
 | Gemini (TTS) | voice | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | `GEMINI_API_KEY` | Working |
-| Google Flow (manual) | video | Manual | Unknown | — | — | — | ❌ | — | none | Working — hands a prompt to a person |
-| Google Flow (browser) | video | Browser | Unknown | — | ✅ | — | ❌ | `ENABLE_BROWSER_FALLBACK` | Chromium + a connected Flow session | **Selectors unverified** — see below |
+| Google Flow (browser) | video | Browser | Unknown | — | ✅ | — | ❌ | `ENABLE_BROWSER_FALLBACK` (**on** by default) | Chromium + a connected Flow session | The default video route. **Selectors unverified** — see below |
+| Google Flow (manual) | video | Manual | Unknown | — | — | — | ❌ | — | none | The fallback when the browser run fails — hands a prompt to a person |
 | Ideogram | image | Cloud | Paid | ✅ | — | — | ❌ | `ENABLE_IDEOGRAM` | `IDEOGRAM_API_KEY` | Implemented, untested against the live API |
 | Voicebox | voice | Local service | **Free** | ✅ | — | optional | ✅ | `ENABLE_VOICEBOX` | `VOICEBOX_URL` | Implemented, untested against a live server |
 | Local image worker | image | Local service | **Free** | ✅ | — | ✅ | ✅ | `ENABLE_LOCAL_AI` | `LOCAL_AI_IMAGE_URL` | HTTP contract; needs an adapter |
@@ -24,7 +24,7 @@ codebase cannot verify the cost, and it behaves exactly like `paid` everywhere. 
 | HyperFrames | render | Local process | **Free** | — | uses Chromium | — | ✅ | `ENABLE_HYPERFRAMES` | none, or `HYPERFRAMES_URL` | Built-in compositor implemented |
 | Cloudinary | storage | Cloud | Paid | ✅ | — | — | ❌ | — | `CLOUDINARY_*` | Working |
 | Local disk | storage | Local | **Free** | — | — | — | ✅ | — | writable disk, not Vercel | Working |
-| Manual lip-sync | lipsync | Manual | Unknown | — | — | — | ❌ | — | none | Working — hands off to a person |
+| Manual lip-sync | lipsync | Manual | Unknown | — | — | — | ❌ | — | none | Hands off to a person, and so is **skipped** by full-automation runs — see below |
 
 ## Licences
 
@@ -45,6 +45,19 @@ The selectors are best-effort placeholders following common conventions. An oper
 access recalibrates them with `npx playwright codegen labs.google/flow`; nothing else needs to
 change, and the self-healing resolver (`src/core/browser/selectors/resolver.ts`) means a single
 broken selector no longer breaks the run outright.
+
+## Lip-sync is skipped, not queued
+
+Every registered `LipSyncProvider` is `manual`; Hedra, HeyGen and Kling all want a paid key this
+project does not have. A full-automation run therefore skips the step rather than parking each
+speaking scene on a hand-off nobody is going to complete — `render.processor.ts` composes a scene
+from its clip plus its separate voice track whenever no lip-synced asset exists, so lip-sync
+improves the result but is not load-bearing.
+
+Requiring it unconditionally is what previously stopped every project with spoken dialogue one step
+short of its final file, permanently. Register an API-backed provider in `core/ai/registry.ts` and
+the step comes back automatically — `core/queue/orchestrator.ts#canLipSyncAutomatically` asks the
+provider rather than hardcoding the answer. Running it by hand on a single scene still works.
 
 ## Adding a provider
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default async function HomePage() {
   const session = await auth();
-  if (session?.user) redirect("/dashboard");
+  if (session?.user) redirect("/create");
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-10 p-8 text-center">
@@ -15,33 +15,24 @@ export default async function HomePage() {
           <Clapperboard className="h-7 w-7" />
         </div>
         <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-          Turn one idea into a finished cartoon video
+          Say it. Watch it. Download it.
         </h1>
-        <p className="max-w-xl text-muted-foreground">
-          No prompts. No AI tools to learn. Just an idea — we guide you through story, characters, scenes,
-          voice, and editing, end to end.
-        </p>
+        <p className="max-w-md text-muted-foreground">One sentence becomes a finished video.</p>
         <Button asChild size="lg">
           <Link href="/login">Get started free</Link>
         </Button>
       </div>
 
-      <div className="grid max-w-3xl gap-4 sm:grid-cols-3">
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-5">
-          <Wand2 className="h-5 w-5 text-primary" />
-          <p className="text-sm font-medium">Guided, step by step</p>
-          <p className="text-xs text-muted-foreground">Every screen tells you exactly what to do next.</p>
-        </div>
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-5">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <p className="text-sm font-medium">Consistent characters</p>
-          <p className="text-xs text-muted-foreground">Create once, reuse across every scene automatically.</p>
-        </div>
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-border p-5">
-          <Film className="h-5 w-5 text-primary" />
-          <p className="text-sm font-medium">Export-ready video</p>
-          <p className="text-xs text-muted-foreground">Music, captions, and transitions handled for you.</p>
-        </div>
+      <div className="flex max-w-lg flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <Wand2 className="h-4 w-4 text-primary" /> Story written for you
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Sparkles className="h-4 w-4 text-primary" /> Characters stay the same
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Film className="h-4 w-4 text-primary" /> Ready to post
+        </span>
       </div>
     </main>
   );

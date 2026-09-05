@@ -46,8 +46,8 @@ export interface ActionEngine {
   drag(page: Page, fromSelector: SelectorInput, toSelector: SelectorInput): Promise<void>;
   wait(page: Page, selector: SelectorInput, timeoutMs?: number): Promise<void>;
   sleep(ms: number): Promise<void>;
-  /** Returns a file path. */
-  captureScreenshot(page: Page): Promise<string>;
+  /** Returns a file path. `name` gives the file a stable, meaningful basename. */
+  captureScreenshot(page: Page, name?: string): Promise<string>;
   captureHtml(page: Page): Promise<string>;
   /** Serialized DOM snapshot. */
   captureDom(page: Page): Promise<string>;
@@ -179,9 +179,13 @@ export class PlaywrightActionEngine implements ActionEngine {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async captureScreenshot(page: Page): Promise<string> {
+  async captureScreenshot(page: Page, name?: string): Promise<string> {
     await mkdir(this.outputDir, { recursive: true });
-    const target = path.join(this.outputDir, `screenshot-${Date.now()}.png`);
+    // A named shot ("flow_prompt_submitted") is what makes a failed run diagnosable at a glance;
+    // `screenshot-1738701234567.png` requires reconstructing the sequence to know what it shows.
+    // The timestamp stays as a suffix so two runs in one output directory can't overwrite.
+    const base = name ? `${safeFileName(name)}-${Date.now()}` : `screenshot-${Date.now()}`;
+    const target = path.join(this.outputDir, `${base}.png`);
     await page.screenshot({ path: target });
     return target;
   }

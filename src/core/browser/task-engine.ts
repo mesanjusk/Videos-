@@ -181,6 +181,20 @@ export class DefaultTaskEngine implements TaskEngine {
       const result = await pipeline.run(page, step);
 
       if (!result.success) {
+        if (step.optional) {
+          // Recorded, not fatal — see TaskStep.optional. The run continues to the next step, which
+          // on a well-built sequence is the check that decides whether skipping this actually
+          // mattered.
+          if (executionMonitor) {
+            await executionMonitor.record(runId, {
+              level: "warn",
+              message: `Optional step ${step.id} (${step.action}) did not succeed, continuing: ${result.error ?? "unknown reason"}`,
+            });
+          }
+          completedSteps = i + 1;
+          if (completedSteps < task.steps.length) await this.deps.stateEngine.transition(runId, "waiting", completedSteps);
+          continue;
+        }
         finalState = "failed";
         error = result.error;
         await this.transition(runId, "recovering");
@@ -203,7 +217,16 @@ export class DefaultTaskEngine implements TaskEngine {
       if (step.action === "screenshot") {
         screenshots.push((result.output?.screenshotPath as string) ?? `screenshot-${step.id}`);
       }
-      if (executionMonitor) await executionMonitor.record(runId, { level: "info", message: `Completed step ${step.id} (${step.action})` });
+      if (executionMonitor) {
+        await executionMonitor.record(runId, {
+          level: "info",
+          // The change summary and the probe are the two things worth having on the record after
+          // the fact: one says whether an action did anything, the other says what the page really
+          // looked like at that moment. Neither is reconstructable from a failed run's error alone.
+          message: `Completed step ${step.id} (${step.action})${result.changeSummary ? ` — ${result.changeSummary}` : ""}`,
+          data: result.output?.probe,
+        });
+      }
     }
 
     if (finalState === "failed") await this.transition(runId, "failed");

@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { JobBadge } from "@/components/shared/job-badge";
 import { GenerateStoryButton } from "./generate-story-button";
 import { PipelineModeToggle } from "./pipeline-mode-toggle";
+import { StudioView, StartButton } from "./studio-view";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const userId = await requireUserId();
@@ -21,6 +22,28 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   if (!project) notFound();
 
   const hasStory = (project.storyJson?.scenes?.length ?? 0) > 0;
+
+  // A full-automation project has nothing for a person to decide between "start" and "download",
+  // so it gets the one-screen studio view instead of the six-section control panel below. The
+  // control panel is still exactly right for a semi/manual project, where every step is a choice
+  // the user is making on purpose — so it stays, unchanged, for those.
+  if ((project.pipelineMode ?? "semi") === "full") {
+    return (
+      <div className="mx-auto max-w-2xl">
+        {hasStory ? (
+          <StudioView projectId={projectId} />
+        ) : (
+          <div className="flex min-h-[70vh] flex-col items-center justify-center gap-6 text-center">
+            <p className="text-5xl" aria-hidden>
+              💡
+            </p>
+            <h1 className="max-w-lg text-2xl font-semibold tracking-tight">{project.premise || project.title}</h1>
+            <StartButton projectId={projectId} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

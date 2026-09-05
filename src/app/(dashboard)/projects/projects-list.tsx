@@ -3,11 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreVertical, Trash2 } from "lucide-react";
+import { Download, MoreVertical, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export interface ProjectListItem {
@@ -20,14 +17,27 @@ export interface ProjectListItem {
   completionPercent: number;
   nextActionLabel: string;
   nextActionHref: string;
+  /** Set once the render finishes — this is what turns a row into something you can watch. */
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
 }
 
+/**
+ * A shelf of videos, not a table of projects.
+ *
+ * Each card used to carry a style badge, a platform, a duration, a language, a percentage, a
+ * progress bar and a button labelled with the next pipeline step ("Plan scenes", "Generate video &
+ * voice"). None of that is what someone is looking for when they come back the next day — they are
+ * looking for the video they made, to watch it or to send it to someone. So a finished project
+ * leads with its thumbnail and a download button, and an unfinished one shows how far along it is
+ * and nothing else.
+ */
 export function ProjectsList({ projects }: { projects: ProjectListItem[] }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function deleteProject(id: string, title: string) {
-    if (!window.confirm(`Delete "${title}"? This can't be undone — all its characters, backgrounds, scenes, and generated media will be removed.`)) {
+    if (!window.confirm(`Delete "${title}"? This also removes its characters, backgrounds, scenes and generated media.`)) {
       return;
     }
     setDeletingId(id);
@@ -37,49 +47,80 @@ export function ProjectsList({ projects }: { projects: ProjectListItem[] }) {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => (
-        <Card key={project.id} className="relative">
-          <Link href={`/projects/${project.id}`} className="absolute inset-0 z-0" aria-label={`Open ${project.title}`} />
-          <CardContent className="flex flex-col gap-3 p-5">
-            <div className="flex items-start justify-between gap-2">
-              <p className="font-medium leading-tight">{project.title}</p>
-              <div className="z-10 flex items-center gap-1">
-                <Badge variant="outline">{project.style}</Badge>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Project actions">
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      disabled={deletingId === project.id}
-                      onSelect={() => deleteProject(project.id, project.title)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete project
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+        <div key={project.id} className="group relative">
+          <Link
+            href={`/projects/${project.id}`}
+            className="block overflow-hidden rounded-2xl border border-border bg-card transition-shadow hover:shadow-lg"
+          >
+            <div className="relative aspect-video w-full overflow-hidden bg-muted">
+              {project.thumbnailUrl ? (
+                // Plain <img>, not next/image: the storage provider is swappable per deployment
+                // (Cloudinary or local disk, see core/storage), so there is no fixed remote host
+                // allowlist to configure next/image against.
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={project.thumbnailUrl}
+                  alt=""
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="text-3xl opacity-40" aria-hidden>
+                    🎬
+                  </span>
+                </div>
+              )}
+
+              {project.videoUrl ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Play className="h-10 w-10 fill-white text-white drop-shadow" />
+                </div>
+              ) : (
+                // An unfinished project says so with one line at the bottom of its own card, rather
+                // than a labelled progress widget that repeats the number three ways.
+                <div className="absolute inset-x-0 bottom-0 h-1 bg-black/10">
+                  <div className="h-full bg-primary" style={{ width: `${project.completionPercent}%` }} />
+                </div>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {project.targetPlatform} · {project.durationSeconds}s · {project.language}
-            </p>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Progress</span>
-                <span>{project.completionPercent}%</span>
-              </div>
-              <Progress value={project.completionPercent} />
+
+            <div className="flex items-center justify-between gap-2 p-4">
+              <p className="truncate font-medium leading-tight">{project.title}</p>
+              {!project.videoUrl && (
+                <span className="shrink-0 text-xs text-muted-foreground">{project.completionPercent}%</span>
+              )}
             </div>
-            <Button asChild size="sm" className="z-10 mt-1 w-full">
-              <Link href={project.nextActionHref}>{project.nextActionLabel}</Link>
-            </Button>
-          </CardContent>
-        </Card>
+          </Link>
+
+          <div className="absolute right-2 top-2 flex items-center gap-1">
+            {project.videoUrl && (
+              <Button asChild size="icon" variant="secondary" className="h-8 w-8 shadow-sm" aria-label={`Download ${project.title}`}>
+                <a href={project.videoUrl} download onClick={(e) => e.stopPropagation()}>
+                  <Download className="h-4 w-4" />
+                </a>
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="icon" className="h-8 w-8 shadow-sm" aria-label={`Actions for ${project.title}`}>
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive"
+                  disabled={deletingId === project.id}
+                  onSelect={() => deleteProject(project.id, project.title)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
       ))}
     </div>
   );

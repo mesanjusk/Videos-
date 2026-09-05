@@ -1,5 +1,46 @@
 # Browser Automation
 
+## It is the route, not a fallback
+
+Google Flow has no public API. Before, `ENABLE_BROWSER_FALLBACK` defaulted off, so every video job
+ended by handing a prompt to a person: open labs.google/flow, paste, generate, download, upload it
+back. That is not a fallback being declined — it is the pipeline not running.
+
+It now defaults **on**. `scene_video` diverts to `scene_video_auto`, which drives Flow and returns
+the MP4 into `completeSceneVideo` like any other provider result. The manual hand-off still exists
+and is still exactly what happens when the site run fails, so the worst case is the old behaviour
+one queue hop later. Two things gate it, both checked rather than assumed: the flag, and a Google
+account with a connected Flow browser session — without a session there is nothing to sign in as.
+
+Set `ENABLE_BROWSER_FALLBACK=false` to force the hand-off and never drive a browser.
+
+## Reading the page instead of guessing at it
+
+Three mechanisms, ported from `mesanjusk/automation`, between "a selector broke" and "here is what
+went wrong":
+
+**Screen states.** `providers/google-flow/state.ts` classifies which Flow screen is displayed —
+`SIGNED_OUT`, `CHALLENGE`, `WORKSPACE`, `PROMPT_READY`, `GENERATING`, `CLIP_READY`, `ERROR`. The
+step sequence ends each phase at a `wait_for_state`, so a signed-out session fails in seconds with
+"reconnect this account", a verification challenge fails as one (and is never worked around), and a
+slow render just keeps waiting. All three used to be the same message: "element not visible after N
+seconds".
+
+**Probing and refs.** `probe_page` reads the live DOM — same-origin iframes included — stamps
+`data-vs-ref` on every visible control, and reports role, accessible name, editability and a
+generated selector for each. `resolveTarget` tries `ref` ahead of every written-in-advance strategy,
+which closes the gap between the element that was seen and an element matching its description —
+the classic way an automation clicks the wrong one of five identical buttons.
+
+**Verify after act.** Every mutating action waits for the DOM to settle and records what changed. A
+step marked `expectChange` fails when nothing did, so a Generate click that lands on a disabled
+button is caught immediately instead of succeeding silently and waiting out a five-minute render
+timeout for a clip nobody started.
+
+A fourth, smaller one: `TaskStep.optional`. "Click New project" is right when Flow opens on its
+project list and wrong when it opens straight into a workspace, and neither is an error — the state
+check that follows is the real gate.
+
 ## One engine
 
 Before the merge there were three Playwright implementations across the two projects. There is now
@@ -98,6 +139,11 @@ One real adapter ships: Google Flow. Its selectors carry an inherited and unchan
 labs.google/flow has no public API and no documented DOM contract, and this environment has no
 Google account to verify against. `src/core/browser/providers/google-flow/selectors.ts` says so
 itself. Recalibrate with `npx playwright codegen labs.google/flow`; nothing else changes.
+
+The state classifier and the probe reduce how much that caveat costs — both read text, roles and
+accessible names rather than class names, which is what survives a redesign — but they do not remove
+it. One calibration pass against a real signed-in Flow session is still the thing that turns this
+from "should work" into "verified".
 
 ## Where it runs
 

@@ -23,7 +23,13 @@ export type ActionType =
   | "sleep"
   | "screenshot"
   | "capture_html"
-  | "capture_dom";
+  | "capture_dom"
+  // Reads the live DOM and stamps a ref on every visible control, so later steps can address what
+  // is really on the page instead of what a selector file guessed would be. See page-probe.ts.
+  | "probe_page"
+  // Polls the provider's own reading of which screen is displayed, rather than sleeping or waiting
+  // on one selector. A provider opts in by implementing `ProviderAdapter.classifyState`.
+  | "wait_for_state";
 
 export type BrowserTaskStage =
   | "pending"
@@ -47,6 +53,21 @@ export interface TaskStep {
     type: "selector_visible" | "url_matches" | "custom";
     params: Record<string, unknown>;
   };
+  /**
+   * Assert that this action visibly changed the page. A click that lands on a disabled control, or
+   * on the wrong one of five identical buttons, otherwise reports success and the run builds its
+   * next steps on something that never happened. Opt-in per step, because plenty of legitimate
+   * actions (a hover, typing into an already-focused box) change nothing measurable.
+   */
+  expectChange?: boolean;
+  /**
+   * A step whose failure does not fail the run. For a site with no DOM contract this is the
+   * difference between a working sequence and a fragile one: "click New project" is right when Flow
+   * opens on its project list and wrong when it opens straight into a workspace, and neither is an
+   * error. The following `wait_for_state` is what actually decides whether the run is where it
+   * needs to be — so the click may miss, and the state check may not.
+   */
+  optional?: boolean;
   timeoutMs?: number;
   /** Defaults to true. */
   retryable?: boolean;

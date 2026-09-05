@@ -25,6 +25,15 @@ export interface ProviderAdapter {
    */
   executeAction(page: Page, step: TaskStep, engine: ActionEngine): Promise<Record<string, unknown> | void>;
   verifyResult(page: Page, step: TaskStep): Promise<boolean>;
+  /**
+   * Optional: name whichever of the provider's own screens is currently displayed, so a
+   * `wait_for_state` step can poll a meaning ("the clip is ready", "you are signed out") instead of
+   * a guessed selector. Returning a provider-defined string keeps the framework provider-agnostic —
+   * it never interprets the value, it only compares it to what the step asked for.
+   *
+   * Adapters that don't implement it simply can't use `wait_for_state`; nothing else changes.
+   */
+  classifyState?(page: Page): Promise<string>;
   recover(context: RecoveryContext): Promise<RecoveryAction>;
   shutdown(): Promise<void>;
 }

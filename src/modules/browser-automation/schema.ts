@@ -9,6 +9,7 @@ const taskStepSchema = z.object({
     "upload_file", "upload_url", "download_file",
     "scroll", "drag", "wait", "sleep",
     "screenshot", "capture_html", "capture_dom",
+    "probe_page", "wait_for_state",
   ]),
   params: z.record(z.string(), z.unknown()).default({}),
   stage: z.enum(BROWSER_TASK_STAGES).optional(),
@@ -18,6 +19,8 @@ const taskStepSchema = z.object({
       params: z.record(z.string(), z.unknown()).default({}),
     })
     .optional(),
+  expectChange: z.boolean().optional(),
+  optional: z.boolean().optional(),
   timeoutMs: z.coerce.number().int().min(0).max(600_000).optional(),
   retryable: z.boolean().optional(),
 });

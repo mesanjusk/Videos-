@@ -90,6 +90,35 @@ export async function cancelJob(userId: string, jobId: string) {
   return jobDoc;
 }
 
+/**
+ * Runs a failed job again, as a new job.
+ *
+ * A new Job document rather than resetting the old one to "queued": the failed attempt is the
+ * record of what went wrong — its error, its provider, its timings — and overwriting it to retry
+ * destroys the only evidence anyone has of the failure they are retrying.
+ *
+ * Only failed jobs qualify. Re-running a completed one would generate a second asset for a step
+ * that already has one, and "retry" is not what a person means when they want to regenerate
+ * something they already have (the per-step regenerate buttons in the Scene Manager are).
+ */
+export async function retryJob(userId: string, jobId: string) {
+  await connectToDatabase();
+  const jobDoc = await Job.findOne({ _id: jobId, userId }).lean();
+  if (!jobDoc) return null;
+  if (jobDoc.status !== "failed") {
+    throw new Error("Only a failed step can be run again.");
+  }
+
+  return enqueueJob({
+    userId,
+    projectId: jobDoc.projectId ? String(jobDoc.projectId) : undefined,
+    sceneId: jobDoc.sceneId ? String(jobDoc.sceneId) : undefined,
+    characterId: jobDoc.characterId ? String(jobDoc.characterId) : undefined,
+    type: jobDoc.type,
+    payload: { ...(jobDoc.payload ?? {}), retryOf: jobId },
+  });
+}
+
 export async function listRecentJobs(userId: string, limit = 10) {
   await connectToDatabase();
   return Job.find({ userId }).sort({ createdAt: -1 }).limit(limit).populate("projectId", "title").lean();
