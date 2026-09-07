@@ -7,6 +7,7 @@ import { Job } from "@/modules/jobs/models/Job";
 import { Asset } from "@/modules/assets/models/Asset";
 import { findAccountWithFlowSession } from "@/modules/accounts/service";
 import { computeProgress } from "@/core/production/progress";
+import { checkStalled, describeStall } from "@/modules/jobs/stall";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const [scenes, jobs, flowAccount] = await Promise.all([
       Scene.find({ userId, projectId: id }).select("status").lean(),
-      Job.find({ userId, projectId: id }).select("status type error").lean(),
+      Job.find({ userId, projectId: id }).select("status type error updatedAt").lean(),
       // Cheap and cached upstream; this is what turns "waiting" into the one actionable setup step.
       findAccountWithFlowSession(userId).catch(() => null),
     ]);
+
+    // A step nothing is processing any more is a stop, not progress. Without this the page reports
+    // "making…" forever on a pipeline that died, and offers nothing to press — which is exactly what
+    // a stranded job looked like from this screen. It only counts as stopped when *nothing* else is
+    // still moving: one stalled job among nine live ones is the queue's problem, not the viewer's.
+    const stalls = jobs.map((job) => ({ job, report: checkStalled(job) }));
+    const stalledJobs = stalls.filter(({ report }) => report.stalled);
+    const stillMoving = stalls.filter(
+      ({ job, report }) => !report.stalled && ["queued", "running", "retrying"].includes(job.status ?? ""),
+    );
+    const stopped = stalledJobs.length > 0 && stillMoving.length === 0 ? stalledJobs[0] : undefined;
 
     const progress = computeProgress({
       projectStatus: project.status ?? "draft",
@@ -41,6 +53,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       sceneStatuses: scenes.map((s) => s.status ?? "pending"),
       jobStatuses: jobs.map((j) => j.status),
       canMakeVideo: !!flowAccount,
+      stalled: !!stopped,
     });
 
     // Only loaded once there is something to play — the studio view shows the player and the
@@ -63,8 +76,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       // The first failure's own message and id, so "something went wrong" can be both explained
       // and acted on here, rather than sending someone to a history page to find out what broke and
       // giving them nothing to do about it when they get there.
-      failure: failedJob?.error ?? null,
-      failedJobId: failedJob?._id.toString() ?? null,
+      failure: failedJob?.error ?? (stopped ? describeStall(stopped.job, stopped.report) : null) ?? null,
+      // Both are re-runnable, and retryJob accepts either (modules/jobs/service.ts).
+      failedJobId: (failedJob ?? stopped?.job)?._id.toString() ?? null,
     });
   } catch (err) {
     if (err instanceof UnauthorizedError) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -40,6 +40,13 @@ export interface ProgressInput {
   jobStatuses: string[];
   /** False when no Google account has a connected Flow session — the one setup step that blocks video. */
   canMakeVideo: boolean;
+  /**
+   * True when the only jobs left are ones nothing is processing any more (modules/jobs/stall.ts).
+   *
+   * A job's stored status cannot express this: a step abandoned mid-flight still says "running",
+   * so without this flag the page reports steady progress on a pipeline that stopped, forever.
+   */
+  stalled?: boolean;
 }
 
 export interface ProgressReport {
@@ -85,6 +92,20 @@ export function computeProgress(input: ProgressInput): ProgressReport {
 
   if (input.hasFinalVideo || input.projectStatus === "done") {
     return { ...base, phase: "ready", title: "Your video is ready", percent: 100, busy: false };
+  }
+
+  // Nothing is moving and nothing will. Said plainly and with the same one button a failure gets,
+  // because from where the user sits the two are the same event: the video stopped being made.
+  if (input.stalled) {
+    return {
+      ...base,
+      phase: "problem",
+      title: "This stopped moving",
+      detail: "A step has been sitting still far longer than it should. Running it again usually picks it up — the rest of your video is safe.",
+      percent: percentFor(input, imagesDone, scenesDone),
+      busy: false,
+      action: { label: "Try again", target: "retry" },
+    };
   }
 
   // A failure only stops the show when nothing else is still running. A single retrying job in a
