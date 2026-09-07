@@ -104,7 +104,10 @@ export function CreateVideoPanel({
   }, [job?.status, job?.result, autoStart, router]);
 
   const planningFailed = job?.status === "failed";
-  const isWorking = isSubmitting || (!!jobId && !planningFailed);
+  // A stalled job counts as stopped, not as working. Without this the button spins forever whenever
+  // anything upstream stops processing the queue, which is indistinguishable from the app hanging.
+  const planningStalled = Boolean(job?.stalled);
+  const isWorking = isSubmitting || (!!jobId && !planningFailed && !planningStalled);
 
   const submit = () => {
     setError(null);
@@ -158,6 +161,14 @@ export function CreateVideoPanel({
         {planningFailed && (
           <p className="text-sm text-destructive">
             {job?.error ?? "That didn't work. Try describing it a different way."}
+          </p>
+        )}
+        {planningStalled && !planningFailed && (
+          <p className="text-sm text-destructive">
+            {job?.stalledReason ?? "This is not moving. Open Queue to see the job."}{" "}
+            <Link href="/queue" className="underline underline-offset-2">
+              Open Queue
+            </Link>
           </p>
         )}
       </div>

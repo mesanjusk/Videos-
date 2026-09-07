@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { connectToDatabase } from "@/core/db/mongoose";
 import { Job, type JobStatus, type JobType } from "./models/Job";
 import { getQueue } from "@/core/queue/queues";
+import { checkStalled } from "./stall";
 import { runQueueTick } from "@/core/queue/worker-runtime";
 
 export interface EnqueueJobInput {
@@ -91,22 +92,34 @@ export async function cancelJob(userId: string, jobId: string) {
 }
 
 /**
- * Runs a failed job again, as a new job.
+ * Runs a failed or stalled job again, as a new job.
  *
  * A new Job document rather than resetting the old one to "queued": the failed attempt is the
  * record of what went wrong — its error, its provider, its timings — and overwriting it to retry
  * destroys the only evidence anyone has of the failure they are retrying.
  *
- * Only failed jobs qualify. Re-running a completed one would generate a second asset for a step
- * that already has one, and "retry" is not what a person means when they want to regenerate
- * something they already have (the per-step regenerate buttons in the Scene Manager are).
+ * A *stalled* job qualifies for the same reason a failed one does: nothing is processing it and
+ * nothing will (see modules/jobs/stall.ts). Refusing to re-run it because its stored status still
+ * says "running" leaves the user with a step that can never finish and no way to ask again — the
+ * dead end this whole path exists to remove. The stalled original is marked cancelled so the queue
+ * does not show two live rows for one step; if it somehow was alive after all, its own completion
+ * write still wins, exactly as it does for a cancelled job today.
+ *
+ * A completed job never qualifies. Re-running one would generate a second asset for a step that
+ * already has one, and "retry" is not what a person means when they want to regenerate something
+ * they already have (the per-step regenerate buttons in the Scene Manager are).
  */
 export async function retryJob(userId: string, jobId: string) {
   await connectToDatabase();
   const jobDoc = await Job.findOne({ _id: jobId, userId }).lean();
   if (!jobDoc) return null;
-  if (jobDoc.status !== "failed") {
-    throw new Error("Only a failed step can be run again.");
+
+  const stalled = checkStalled(jobDoc).stalled;
+  if (jobDoc.status !== "failed" && !stalled) {
+    throw new Error("Only a failed or stuck step can be run again.");
+  }
+  if (stalled && jobDoc.status !== "failed") {
+    await Job.updateOne({ _id: jobId, userId }, { $set: { status: "cancelled" } });
   }
 
   return enqueueJob({
