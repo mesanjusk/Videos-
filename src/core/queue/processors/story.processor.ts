@@ -1,7 +1,7 @@
 import type { Job as BullJob } from "bullmq";
 import { withJobLifecycle, type BullJobData } from "./helpers";
 import { Project } from "@/modules/projects/models/Project";
-import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { resolveGenerationAccountOrEnvKey } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getStoryProvider } from "@/core/ai/registry";
 import { createScenesFromStory } from "@/modules/scenes/service";
@@ -15,8 +15,11 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
     const project = await Project.findOne({ _id: jobDoc.projectId, userId: jobDoc.userId });
     if (!project) throw new Error("Project not found");
 
-    const { accountId, context } = await resolveGenerationAccount(jobDoc.userId);
-    jobDoc.set("googleAccountId", accountId);
+    // Null when no pooled account is available but GEMINI_API_KEY is — the providers take an
+    // optional context and fall back to that key themselves.
+    const account = await resolveGenerationAccountOrEnvKey(jobDoc.userId);
+    const context = account?.context;
+    if (account) jobDoc.set("googleAccountId", account.accountId);
     await jobDoc.save();
 
     // For a pasted script we still route through the same "expand a premise" prompt — the model
@@ -40,7 +43,7 @@ export async function processStoryJob(bullJob: BullJob<BullJobData>) {
       },
       context,
     );
-    await recordAccountUsage(accountId);
+    if (account) await recordAccountUsage(account.accountId);
 
     project.set("storyJson", { title: story.title, characters: story.characters, scenes: story.scenes });
     project.status = "story";

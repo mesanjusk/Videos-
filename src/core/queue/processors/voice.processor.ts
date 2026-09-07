@@ -3,7 +3,7 @@ import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./help
 import { Scene } from "@/modules/scenes/models/Scene";
 import { Character } from "@/modules/characters/models/Character";
 import { Asset } from "@/modules/assets/models/Asset";
-import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { resolveGenerationAccountOrEnvKey } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getVoiceProvider } from "@/core/ai/registry";
 import { uploadAudioAsset } from "@/core/storage/cloudinary";
@@ -23,8 +23,11 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
       ? await Character.findOne({ _id: scene.characterIds[0], userId: jobDoc.userId }).lean()
       : null;
 
-    const { accountId, context } = await resolveGenerationAccount(jobDoc.userId);
-    jobDoc.set("googleAccountId", accountId);
+    // Null when no pooled account is available but GEMINI_API_KEY is — the providers take an
+    // optional context and fall back to that key themselves.
+    const account = await resolveGenerationAccountOrEnvKey(jobDoc.userId);
+    const context = account?.context;
+    if (account) jobDoc.set("googleAccountId", account.accountId);
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "voice");
@@ -41,7 +44,7 @@ export async function processVoiceJob(bullJob: BullJob<BullJobData>): Promise<Pr
       },
       context,
     );
-    await recordAccountUsage(accountId);
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadAudioAsset(voice.data, {
       folder: `projects/${jobDoc.projectId}/scenes/${scene._id.toString()}`,

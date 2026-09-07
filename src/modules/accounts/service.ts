@@ -2,7 +2,7 @@ import { connectToDatabase } from "@/core/db/mongoose";
 import { GoogleAccount } from "./models/GoogleAccount";
 import { encryptSecret, decryptSecret } from "@/core/auth/encryption";
 import type { GenerationAccountContext } from "@/core/ai/types";
-import { selectGoogleAccount, decryptAccountApiKey } from "./selector";
+import { selectGoogleAccount, decryptAccountApiKey, NoAvailableGoogleAccountError } from "./selector";
 
 export interface AddGoogleAccountInput {
   userId: string;
@@ -124,4 +124,30 @@ export async function resolveGenerationAccount(userId: string): Promise<{
     accountId: account._id.toString(),
     context: { googleAccountId: account._id.toString(), apiKey: decryptAccountApiKey(account) },
   };
+}
+
+/**
+ * The pooled account if there is one, or null when the environment's own `GEMINI_API_KEY` can serve
+ * the call instead.
+ *
+ * Every generation step used to demand a pooled account and fail outright without one — so a
+ * deployment holding a perfectly good `GEMINI_API_KEY` could not generate anything, and said so in
+ * the language of exhausted quota. `getGeminiClient(undefined)` already falls back to that key by
+ * design (providers/google/gemini-client.ts); nothing but this check stood in its way.
+ *
+ * Falls back only when the key actually exists. With no key and no account there is nothing to run
+ * on, and the pool's own explanation is the truthful answer — so it is rethrown untouched rather
+ * than replaced by a vaguer failure further down.
+ */
+export async function resolveGenerationAccountOrEnvKey(
+  userId: string,
+): Promise<{ accountId: string; context: GenerationAccountContext } | null> {
+  try {
+    return await resolveGenerationAccount(userId);
+  } catch (err) {
+    if (!(err instanceof NoAvailableGoogleAccountError)) throw err;
+    if (!process.env.GEMINI_API_KEY) throw err;
+    console.warn(`[accounts] ${err.message} Falling back to GEMINI_API_KEY for this call.`);
+    return null;
+  }
 }

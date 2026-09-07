@@ -3,7 +3,7 @@ import { withJobLifecycle, type BullJobData } from "./helpers";
 import { Project } from "@/modules/projects/models/Project";
 import { Background } from "@/modules/backgrounds/models/Background";
 import { Asset } from "@/modules/assets/models/Asset";
-import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { resolveGenerationAccountOrEnvKey } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
@@ -27,8 +27,11 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
     if (!background) throw new Error("Background not found");
     if (!project) throw new Error("Project not found");
 
-    const { accountId, context } = await resolveGenerationAccount(jobDoc.userId);
-    jobDoc.set("googleAccountId", accountId);
+    // Null when no pooled account is available but GEMINI_API_KEY is — the providers take an
+    // optional context and fall back to that key themselves.
+    const account = await resolveGenerationAccountOrEnvKey(jobDoc.userId);
+    const context = account?.context;
+    if (account) jobDoc.set("googleAccountId", account.accountId);
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "image");
@@ -48,7 +51,7 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
       },
       context,
     );
-    await recordAccountUsage(accountId);
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadImageAsset(image.data, {
       folder: `projects/${jobDoc.projectId}/backgrounds`,
