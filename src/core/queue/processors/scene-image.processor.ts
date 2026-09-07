@@ -5,7 +5,7 @@ import { Scene } from "@/modules/scenes/models/Scene";
 import { Character } from "@/modules/characters/models/Character";
 import { Background } from "@/modules/backgrounds/models/Background";
 import { Asset } from "@/modules/assets/models/Asset";
-import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { resolveGenerationAccountOrEnvKey } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
@@ -41,8 +41,11 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
 
     const backgroundAsset = background?.assetId as unknown as { url: string } | undefined;
 
-    const { accountId, context } = await resolveGenerationAccount(jobDoc.userId);
-    jobDoc.set("googleAccountId", accountId);
+    // Null when no pooled account is available but GEMINI_API_KEY is — the providers take an
+    // optional context and fall back to that key themselves.
+    const account = await resolveGenerationAccountOrEnvKey(jobDoc.userId);
+    const context = account?.context;
+    if (account) jobDoc.set("googleAccountId", account.accountId);
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "image");
@@ -65,7 +68,7 @@ export async function processSceneImageJob(bullJob: BullJob<BullJobData>): Promi
       },
       context,
     );
-    await recordAccountUsage(accountId);
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadImageAsset(image.data, {
       folder: `projects/${jobDoc.projectId}/scenes/${scene._id.toString()}`,

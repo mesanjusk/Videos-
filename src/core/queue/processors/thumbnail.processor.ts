@@ -3,7 +3,7 @@ import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./help
 import { Project } from "@/modules/projects/models/Project";
 import { Character } from "@/modules/characters/models/Character";
 import { Asset } from "@/modules/assets/models/Asset";
-import { resolveGenerationAccount } from "@/modules/accounts/service";
+import { resolveGenerationAccountOrEnvKey } from "@/modules/accounts/service";
 import { recordAccountUsage } from "@/modules/accounts/selector";
 import { getImageProvider } from "@/core/ai/registry";
 import { uploadImageAsset } from "@/core/storage/cloudinary";
@@ -32,8 +32,11 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
       })
       .filter((r): r is { url: string; description: string } => !!r?.url);
 
-    const { accountId, context } = await resolveGenerationAccount(jobDoc.userId);
-    jobDoc.set("googleAccountId", accountId);
+    // Null when no pooled account is available but GEMINI_API_KEY is — the providers take an
+    // optional context and fall back to that key themselves.
+    const account = await resolveGenerationAccountOrEnvKey(jobDoc.userId);
+    const context = account?.context;
+    if (account) jobDoc.set("googleAccountId", account.accountId);
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "image");
@@ -53,7 +56,7 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
       },
       context,
     );
-    await recordAccountUsage(accountId);
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadImageAsset(image.data, {
       folder: `projects/${jobDoc.projectId}`,
