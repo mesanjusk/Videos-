@@ -37,6 +37,7 @@ import { workerOnlyProcessorRegistry } from "./src/core/queue/worker-only-proces
 import { connectToDatabase } from "./src/core/db/mongoose";
 import { registerGoogleFlowProvider } from "./src/core/browser/providers/google-flow/register";
 import { startScheduler } from "./src/core/automation/scheduler";
+import { startWorkerHeartbeat, stopWorkerHeartbeat } from "./src/core/queue/worker-presence";
 
 const WORKER_ID = process.env.WORKER_ID ?? `worker-${process.pid}`;
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 2);
@@ -85,6 +86,13 @@ async function main() {
 
   const schedulerTimer = startScheduler();
 
+  // Announces that this process exists, so the app can stop handing worker-only work to a worker
+  // that isn't there — see src/core/queue/worker-presence.ts.
+  const heartbeatTimer = startWorkerHeartbeat(
+    WORKER_ID,
+    workers.map((w) => w.name),
+  );
+
   console.log(`[worker ${WORKER_ID}] running for queues: ${workers.map((w) => w.name).join(", ")}`);
 
   let shuttingDown = false;
@@ -93,6 +101,8 @@ async function main() {
     shuttingDown = true;
     console.log(`[worker ${WORKER_ID}] ${signal} received — finishing in-flight jobs...`);
     clearInterval(schedulerTimer);
+    clearInterval(heartbeatTimer);
+    await stopWorkerHeartbeat().catch(() => {});
     health.close();
     // `close()` without force lets a job that is mid-step finish rather than abandoning a browser
     // session halfway through a form.

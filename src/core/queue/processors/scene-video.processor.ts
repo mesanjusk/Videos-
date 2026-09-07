@@ -15,6 +15,7 @@ import { checkVideoDuration } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 import { getFeatureFlags } from "@/core/config/flags";
+import { isWorkerRunning } from "@/core/queue/worker-presence";
 import { findAccountWithFlowSession } from "@/modules/accounts/service";
 import { enqueueJob } from "@/modules/jobs/service";
 import { ProductionProfile } from "@/modules/production-profiles/models/ProductionProfile";
@@ -168,6 +169,12 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
  *    that drives a browser is a behaviour change, and behaviour changes are opt-in.
  *  - a Google account with a connected Flow browser session exists. Without one there is nothing
  *    to sign in as, and the automation would only fail its way back to the manual hand-off.
+ *  - a worker process is actually running. `scene_video_auto` is worker-only, so without one this
+ *    diversion enqueues into a queue nothing drains — and because the diverting job then reports
+ *    itself completed, the project shows a video being made, forever, with nothing failed and
+ *    nothing to press. Confirmed live: this repo's worker was never deployed, and every video went
+ *    there to die. The manual hand-off below is worse in principle and works in practice, which
+ *    makes it the right answer when there is no worker.
  *
  * Never throws. A fallback that cannot be attempted must leave the scene exactly where it would
  * have been anyway — waiting for a human — not fail the job.
@@ -188,6 +195,14 @@ async function tryBrowserFallback(
 
     const account = await findAccountWithFlowSession(userId);
     if (!account) return null;
+
+    if (!(await isWorkerRunning())) {
+      console.warn(
+        `[video] scene ${sceneId} not diverted to browser automation: no worker process is running to execute it. ` +
+          "Falling back to the manual hand-off. Deploy the worker (render.yaml) to automate this step.",
+      );
+      return null;
+    }
 
     const job = await enqueueJob({
       userId,
