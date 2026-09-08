@@ -28,6 +28,18 @@ const storyProviders: Record<string, StoryProvider> = {
   gemini: new GeminiStoryProvider(),
 };
 
+/**
+ * The browser route is a capability, not an `ImageProvider`.
+ *
+ * Every provider in the maps below answers synchronously. Google Flow cannot — it is a website
+ * being driven, minutes per image — so it is served by the queue instead (see
+ * core/production/flow-image-step.ts), and appears here only so Settings can offer it and
+ * `AI_IMAGE_PROVIDER` can name it. `getImageProvider` deliberately refuses it rather than
+ * pretending: a caller that reached for a synchronous provider and got this one has a bug, and
+ * should be told which one.
+ */
+export const BROWSER_IMAGE_PROVIDER_ID = "flow-browser";
+
 const imageProviders: Record<string, ImageProvider> = {
   gemini: new GeminiImageProvider(),
   // Added by the merge. Both report themselves unavailable unless their flag is on and their
@@ -129,6 +141,12 @@ export function getStoryProvider(providerId?: string): StoryProvider {
 
 export function getImageProvider(providerId?: string): ImageProvider {
   const id = providerId ?? envDefault("image");
+  if (id === BROWSER_IMAGE_PROVIDER_ID) {
+    throw new Error(
+      `"${BROWSER_IMAGE_PROVIDER_ID}" generates images through a browser and cannot be called synchronously. ` +
+        "The image processors route it through core/production/flow-image-step.ts instead.",
+    );
+  }
   const provider = imageProviders[id];
   if (!provider) throw new Error(`Unknown image provider "${id}"`);
   return assertUsable(provider, "image");
@@ -159,6 +177,7 @@ export function listEnabledProviders(): ProviderDescriptor[] {
   return [
     ...Object.values(storyProviders).map((p) => ({ id: p.id, label: p.label, capability: "story" as const, enabled: true })),
     ...Object.values(imageProviders).map((p) => ({ id: p.id, label: p.label, capability: "image" as const, enabled: true })),
+    { id: BROWSER_IMAGE_PROVIDER_ID, label: "Google Flow (browser)", capability: "image" as const, enabled: true },
     ...Object.values(videoProviders).map((p) => ({ id: p.id, label: p.label, capability: "video" as const, enabled: true })),
     ...Object.values(voiceProviders).map((p) => ({ id: p.id, label: p.label, capability: "voice" as const, enabled: true })),
     ...Object.values(lipSyncProviders).map((p) => ({ id: p.id, label: p.label, capability: "lipsync" as const, enabled: true })),

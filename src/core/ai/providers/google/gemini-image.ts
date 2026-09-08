@@ -9,21 +9,18 @@ import type {
   ThumbnailInput,
 } from "../../types";
 import { getGeminiClient, wrapGeminiError } from "./gemini-client";
-import { renderTemplate } from "@/core/prompt-engine/engine";
-import { backgroundTemplate, characterTemplate, sceneImageTemplate, thumbnailTemplate } from "@/core/prompt-engine/templates";
-
-const POSES: CharacterPose[] = [
-  "front-view",
-  "side-view",
-  "back-view",
-  "45-degree-view",
-  "happy",
-  "sad",
-  "angry",
-  "laughing",
-  "walking-pose",
-  "running-pose",
-];
+// Prompt composition is shared with the Google Flow browser route — see providers/image-prompts.ts
+// for why it does not live in here any more.
+import {
+  DEFAULT_POSES,
+  backgroundPrompt,
+  characterBasePrompt,
+  posePrompt,
+  sceneImagePrompt,
+  sceneImageReferences,
+  thumbnailPrompt,
+  thumbnailReferences,
+} from "../image-prompts";
 
 async function generateImage(
   client: ReturnType<typeof getGeminiClient>,
@@ -70,25 +67,13 @@ export class GeminiImageProvider implements ImageProvider {
     account?: GenerationAccountContext,
   ): Promise<Record<CharacterPose, GeneratedImage>> {
     const client = getGeminiClient(account);
-    const poses = input.poses.length > 0 ? input.poses : POSES;
-    const basePrompt = renderTemplate(input.templateOverride ?? characterTemplate, {
-      style: input.spec.style,
-      age: input.spec.age ?? "",
-      bodyType: input.spec.bodyType ?? "",
-      face: input.spec.face ?? "",
-      eyes: input.spec.eyes ?? "",
-      hair: input.spec.hair ?? "",
-      clothes: input.spec.clothes ?? "",
-      shoes: input.spec.shoes ?? "",
-      accessories: input.spec.accessories ?? "",
-      personality: input.spec.personality ?? "",
-      aspectRatio: input.aspectRatio,
-    });
+    const poses = input.poses.length > 0 ? input.poses : DEFAULT_POSES;
+    const basePrompt = characterBasePrompt(input);
 
     try {
       const entries = await Promise.all(
         poses.map(async (pose) => {
-          const image = await generateImage(client, `${basePrompt}\n\nPose for this image: ${pose.replace(/-/g, " ")}.`);
+          const image = await generateImage(client, posePrompt(basePrompt, pose));
           return [pose, image] as const;
         }),
       );
@@ -100,12 +85,7 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateBackground(input: BackgroundInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(input.templateOverride ?? backgroundTemplate, {
-      description: input.description,
-      style: input.style,
-      lighting: input.lighting,
-      aspectRatio: input.aspectRatio,
-    });
+    const prompt = backgroundPrompt(input);
     try {
       return await generateImage(client, prompt);
     } catch (err) {
@@ -115,18 +95,8 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateSceneImage(input: SceneImageInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(input.templateOverride ?? sceneImageTemplate, {
-      action: input.action,
-      cameraAngle: input.cameraAngle,
-      emotion: input.emotion,
-      lighting: input.lighting,
-      style: input.style,
-      aspectRatio: input.aspectRatio,
-    });
-    const refs = [
-      ...input.characterReferenceImages.map((r) => r.url),
-      ...(input.backgroundReferenceUrl ? [input.backgroundReferenceUrl] : []),
-    ];
+    const prompt = sceneImagePrompt(input);
+    const refs = sceneImageReferences(input);
     try {
       return await generateImage(client, prompt, refs);
     } catch (err) {
@@ -136,17 +106,9 @@ export class GeminiImageProvider implements ImageProvider {
 
   async generateThumbnail(input: ThumbnailInput, account?: GenerationAccountContext): Promise<GeneratedImage> {
     const client = getGeminiClient(account);
-    const prompt = renderTemplate(input.templateOverride ?? thumbnailTemplate, {
-      style: input.style,
-      title: input.title,
-      aspectRatio: "1080x1920 (9:16)",
-    });
+    const prompt = thumbnailPrompt(input);
     try {
-      return await generateImage(
-        client,
-        prompt,
-        input.characterReferenceImages.map((r) => r.url),
-      );
+      return await generateImage(client, prompt, thumbnailReferences(input));
     } catch (err) {
       wrapGeminiError(this.id, err);
     }

@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/core/db/mongoose";
 import { Job, type JobDoc } from "@/modules/jobs/models/Job";
 import { markAccountQuotaExceeded } from "@/modules/accounts/selector";
 import { ProviderQuotaExceededError } from "@/core/ai/types";
+import { FlowMissionPendingError } from "@/core/production/flow-image-step";
 import type { HydratedDocument } from "mongoose";
 
 export type BullJobData = { jobId: string };
@@ -47,6 +48,16 @@ export async function withJobLifecycle(
     await jobDoc.save();
     return result;
   } catch (err) {
+    // Waiting on a browser mission is not a failure and must not be retried: BullMQ starting the
+    // job again would enqueue a second set of Flow missions for images already being drawn. The
+    // job parks, and the mission's own completion is what wakes it (see extension-service.ts).
+    if (err instanceof FlowMissionPendingError) {
+      jobDoc.status = "manual_pending";
+      jobDoc.error = undefined;
+      await jobDoc.save().catch((saveErr) => console.error(`[queue] could not park job ${jobDoc._id}:`, saveErr));
+      return { status: "manual_pending", waitingOnFlowRuns: err.runIds };
+    }
+
     // Benching the account is a cool-down, so it is only right for a quota that will come back. An
     // allowance of zero never does — the model simply is not on this key's free tier — and taking
     // the account out of rotation for it disables every *other* model the key can still serve.
