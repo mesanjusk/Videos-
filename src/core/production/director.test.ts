@@ -207,6 +207,22 @@ describe("repairing a model's plan against the schema", () => {
     expect(data?.assetRequirements[0]?.kind).toBe("video");
   });
 
+  it("reads a boolean answered as a sentence that starts with the answer", () => {
+    // The exact-word list shipped and failed the same day on "yes, narrated in Hindi". A sentence
+    // that opens by answering the question has answered it.
+    expect(coerce({ objective: "x", voiceRequirements: { narration: "yes, narrated in Hindi" } }).data
+      ?.voiceRequirements.narration).toBe(true);
+    expect(coerce({ objective: "x", musicRequirements: { required: "no, silent throughout" } }).data
+      ?.musicRequirements.required).toBe(false);
+  });
+
+  it("does not read a stray 'no' in the middle as false", () => {
+    // "no music, narration throughout" opens with "no" about *music*, and this field is narration.
+    // Anchoring to the leading token is what keeps a substring search from inverting the answer.
+    expect(coerce({ objective: "x", voiceRequirements: { narration: "narration throughout, no music" } }).data)
+      .toBeUndefined();
+  });
+
   it("still fails on a value whose meaning is not obvious", () => {
     // Guessing here would replace a loud error with a plan that quietly says something nobody
     // asked for. "sometimes" is not a boolean and must not be invented into one.
