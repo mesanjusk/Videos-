@@ -12,7 +12,7 @@ import { getProviderOverride } from "@/modules/settings/service";
 import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
-import { isFlowImageProvider, resolveFlowImages } from "@/core/production/flow-image-step";
+import { routeSingleImage } from "@/core/production/image-route";
 import { thumbnailPrompt, thumbnailReferences } from "@/core/ai/providers/image-prompts";
 
 /** PDF Step 10 — Thumbnail. */
@@ -42,9 +42,6 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "image");
-    // Flow is not an ImageProvider — it cannot answer synchronously — so the registry is only asked
-    // for one when an API-backed provider is what will actually be used.
-    const provider = isFlowImageProvider(providerId) ? null : getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const title = project.storyJson?.title ?? project.title;
     const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
@@ -58,20 +55,18 @@ export async function processThumbnailJob(bullJob: BullJob<BullJobData>): Promis
       templateOverride,
     };
 
-    const image = isFlowImageProvider(providerId)
-      ? (
-          await resolveFlowImages(
-            jobDoc,
-            [{ key: "image", prompt: thumbnailPrompt(input), referenceUrls: thumbnailReferences(input) }],
-            {
-              projectId: jobDoc.projectId?.toString(),
-              aspectRatio: "9:16",
-              imageTarget: { kind: "thumbnail", projectId: jobDoc.projectId?.toString() },
-            },
-          )
-        ).image!
-      : await provider!.generateThumbnail(input, context);
-    if (account && !isFlowImageProvider(providerId)) await recordAccountUsage(account.accountId);
+    const image = await routeSingleImage(jobDoc, {
+      preferredProviderId: providerId,
+      prompt: thumbnailPrompt(input),
+      referenceUrls: thumbnailReferences(input),
+      viaApi: (provider) => provider.generateThumbnail(input, context),
+      flow: {
+        projectId: jobDoc.projectId?.toString(),
+        aspectRatio: "9:16",
+        imageTarget: { kind: "thumbnail", projectId: jobDoc.projectId?.toString() },
+      },
+    });
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadImageAsset(image.data, {
       folder: `projects/${jobDoc.projectId}`,

@@ -126,8 +126,3 @@ export async function resolveFlowImages(
   );
   return Object.fromEntries(entries);
 }
-
-/** Whether this run should generate images through Flow rather than an image API. */
-export function isFlowImageProvider(providerId: string | undefined | null): boolean {
-  return providerId === "flow-browser";
-}
