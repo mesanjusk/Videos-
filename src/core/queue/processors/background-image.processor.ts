@@ -13,7 +13,7 @@ import { onCharacterOrBackgroundReady } from "@/core/queue/orchestrator";
 import { checkImageResolution } from "@/core/quality/checks";
 import { QualityCheckFailedError } from "@/core/quality/errors";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
-import { isFlowImageProvider, resolveFlowImages } from "@/core/production/flow-image-step";
+import { routeSingleImage } from "@/core/production/image-route";
 import { backgroundPrompt } from "@/core/ai/providers/image-prompts";
 
 /** PDF Step 3 — Create Backgrounds. */
@@ -37,9 +37,6 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
     await jobDoc.save();
 
     const providerId = await getProviderOverride(jobDoc.userId, "image");
-    // Flow is not an ImageProvider — it cannot answer synchronously — so the registry is only asked
-    // for one when an API-backed provider is what will actually be used.
-    const provider = isFlowImageProvider(providerId) ? null : getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
     const templateOverride = await resolveActiveTemplate(jobDoc.userId, "background", promptTemplateOverrides?.background);
@@ -53,18 +50,19 @@ export async function processBackgroundImageJob(bullJob: BullJob<BullJobData>) {
       templateOverride,
     };
 
-    // Flow draws this in a browser, which takes minutes — so the step parks and resumes rather
-    // than holding a serverless function open. Everything below is unchanged either way.
-    const image = isFlowImageProvider(providerId)
-      ? (
-          await resolveFlowImages(jobDoc, [{ key: "image", prompt: backgroundPrompt(input) }], {
-            projectId: jobDoc.projectId?.toString(),
-            aspectRatio: "1:1",
-            imageTarget: { kind: "background", backgroundId: background._id.toString() },
-          })
-        ).image!
-      : await provider!.generateBackground(input, context);
-    if (account && !isFlowImageProvider(providerId)) await recordAccountUsage(account.accountId);
+    // The router picks the provider and moves on from one that cannot serve at all — see
+    // core/production/image-route.ts. Everything below is the same whichever route drew it.
+    const image = await routeSingleImage(jobDoc, {
+      preferredProviderId: providerId,
+      prompt: backgroundPrompt(input),
+      viaApi: (provider) => provider.generateBackground(input, context),
+      flow: {
+        projectId: jobDoc.projectId?.toString(),
+        aspectRatio: "1:1",
+        imageTarget: { kind: "background", backgroundId: background._id.toString() },
+      },
+    });
+    if (account) await recordAccountUsage(account.accountId);
 
     const uploaded = await uploadImageAsset(image.data, {
       folder: `projects/${jobDoc.projectId}/backgrounds`,

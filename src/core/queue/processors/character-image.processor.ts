@@ -16,7 +16,7 @@ import { QualityCheckFailedError } from "@/core/quality/errors";
 import { computeDHash, dHashSimilarity } from "@/core/quality/perceptual-hash";
 import type { QualityIssue } from "@/core/quality/types";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
-import { isFlowImageProvider, resolveFlowImages } from "@/core/production/flow-image-step";
+import { routeImages } from "@/core/production/image-route";
 import { characterBasePrompt, posePrompt } from "@/core/ai/providers/image-prompts";
 import type { GeneratedImage } from "@/core/ai/types";
 
@@ -44,9 +44,6 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
 
     const poses = (jobDoc.payload?.poses as CharacterPose[] | undefined) ?? DEFAULT_POSES;
     const providerId = await getProviderOverride(jobDoc.userId, "image");
-    // Flow is not an ImageProvider — it cannot answer synchronously — so the registry is only asked
-    // for one when an API-backed provider is what will actually be used.
-    const provider = isFlowImageProvider(providerId) ? null : getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
     const templateOverride = await resolveActiveTemplate(jobDoc.userId, "character", promptTemplateOverrides?.character);
@@ -70,21 +67,20 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
       templateOverride,
     };
 
-    // One mission per pose, not one mission for the sheet: a browser run that stumbles on pose
-    // seven should cost pose seven, not all ten. They are tracked by pose name and the job resumes
-    // when every one has landed.
-    const images = isFlowImageProvider(providerId)
-      ? ((await resolveFlowImages(
-          jobDoc,
-          poses.map((pose) => ({ key: pose, prompt: posePrompt(characterBasePrompt(sheetInput), pose) })),
-          {
-            projectId: jobDoc.projectId?.toString(),
-            aspectRatio: "9:16",
-            imageTarget: { kind: "character", characterId: character._id.toString() },
-          },
-        )) as Record<CharacterPose, GeneratedImage>)
-      : await provider!.generateCharacterSheet(sheetInput, context);
-    if (account && !isFlowImageProvider(providerId)) await recordAccountUsage(account.accountId);
+    // One request per pose, not one for the sheet: on the browser route that means a run which
+    // stumbles on pose seven costs pose seven, not all ten. The API route composes the same poses
+    // from the same base description, so the two draw the same character either way.
+    const images = (await routeImages(jobDoc, {
+      preferredProviderId: providerId,
+      prompts: poses.map((pose) => ({ key: pose, prompt: posePrompt(characterBasePrompt(sheetInput), pose) })),
+      viaApi: (provider) => provider.generateCharacterSheet(sheetInput, context),
+      flow: {
+        projectId: jobDoc.projectId?.toString(),
+        aspectRatio: "9:16",
+        imageTarget: { kind: "character", characterId: character._id.toString() },
+      },
+    })) as Record<CharacterPose, GeneratedImage>;
+    if (account) await recordAccountUsage(account.accountId);
 
     const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
 
