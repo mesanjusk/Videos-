@@ -15,6 +15,17 @@ export const FLOW_SELECTORS = {
   generateButton: '[data-testid="generate-button"], button:has-text("Generate"), button:has-text("Create")',
   renderingIndicator: '[data-testid="rendering-indicator"], text=/generating/i',
   resultVideo: '[data-testid="result-video"] video, video',
+
+  // ── Image generation ────────────────────────────────────────────────────────────────────────
+  // Flow generates stills as well as clips, and the stills are what feed a scene's video as
+  // reference material. Same caveat as everything else here: layered guesses, recalibrate against
+  // the live product. `imageModeButton` is optional in the mission — a Flow already sitting in
+  // image mode has nothing to switch.
+  imageModeButton:
+    '[data-testid="image-mode"], button:has-text("Image"), [role="tab"]:has-text("Image"), button:has-text("Frames")',
+  resultImage: '[data-testid="result-image"] img, [data-testid="generated-image"] img, img[alt*="generated" i]',
+  imageDownloadButton:
+    '[data-testid="download-image"], button:has-text("Download image"), button:has-text("Download"), [role="menuitem"]:has-text("PNG")',
   addToTimelineButton: '[data-testid="add-to-timeline"], button:has-text("Add to timeline"), button:has-text("Add to scene")',
   timeline: '[data-testid="timeline"], [aria-label*="timeline" i]',
   combineButton: '[data-testid="combine-scenes"], button:has-text("Combine"), button:has-text("Merge")',

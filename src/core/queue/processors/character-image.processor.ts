@@ -16,6 +16,9 @@ import { QualityCheckFailedError } from "@/core/quality/errors";
 import { computeDHash, dHashSimilarity } from "@/core/quality/perceptual-hash";
 import type { QualityIssue } from "@/core/quality/types";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
+import { isFlowImageProvider, resolveFlowImages } from "@/core/production/flow-image-step";
+import { characterBasePrompt, posePrompt } from "@/core/ai/providers/image-prompts";
+import type { GeneratedImage } from "@/core/ai/types";
 
 // The Character Library's "Expressions" set — front view plus the emotions/poses a producer
 // needs across scenes, so a new character is reuse-ready without a second generation pass.
@@ -41,33 +44,47 @@ export async function processCharacterImageJob(bullJob: BullJob<BullJobData>) {
 
     const poses = (jobDoc.payload?.poses as CharacterPose[] | undefined) ?? DEFAULT_POSES;
     const providerId = await getProviderOverride(jobDoc.userId, "image");
-    const provider = getImageProvider(providerId);
+    // Flow is not an ImageProvider — it cannot answer synchronously — so the registry is only asked
+    // for one when an API-backed provider is what will actually be used.
+    const provider = isFlowImageProvider(providerId) ? null : getImageProvider(providerId);
     const style = project.style === "Custom" ? (project.customStyleDescription ?? "Custom") : project.style;
     const promptTemplateOverrides = project.promptTemplateOverrides as Record<string, string> | undefined;
     const templateOverride = await resolveActiveTemplate(jobDoc.userId, "character", promptTemplateOverrides?.character);
 
-    const images = await provider.generateCharacterSheet(
-      {
-        spec: {
-          name: character.name,
-          style,
-          age: character.spec?.age ?? undefined,
-          bodyType: character.spec?.bodyType ?? undefined,
-          face: character.spec?.face ?? undefined,
-          eyes: character.spec?.eyes ?? undefined,
-          hair: character.spec?.hair ?? undefined,
-          clothes: character.spec?.clothes ?? undefined,
-          shoes: character.spec?.shoes ?? undefined,
-          accessories: character.spec?.accessories ?? undefined,
-          personality: character.spec?.personality ?? undefined,
-        },
-        poses,
-        aspectRatio: "4:5",
-        templateOverride,
+    const sheetInput = {
+      spec: {
+        name: character.name,
+        style,
+        age: character.spec?.age ?? undefined,
+        bodyType: character.spec?.bodyType ?? undefined,
+        face: character.spec?.face ?? undefined,
+        eyes: character.spec?.eyes ?? undefined,
+        hair: character.spec?.hair ?? undefined,
+        clothes: character.spec?.clothes ?? undefined,
+        shoes: character.spec?.shoes ?? undefined,
+        accessories: character.spec?.accessories ?? undefined,
+        personality: character.spec?.personality ?? undefined,
       },
-      context,
-    );
-    if (account) await recordAccountUsage(account.accountId);
+      poses,
+      aspectRatio: "4:5" as const,
+      templateOverride,
+    };
+
+    // One mission per pose, not one mission for the sheet: a browser run that stumbles on pose
+    // seven should cost pose seven, not all ten. They are tracked by pose name and the job resumes
+    // when every one has landed.
+    const images = isFlowImageProvider(providerId)
+      ? ((await resolveFlowImages(
+          jobDoc,
+          poses.map((pose) => ({ key: pose, prompt: posePrompt(characterBasePrompt(sheetInput), pose) })),
+          {
+            projectId: jobDoc.projectId?.toString(),
+            aspectRatio: "9:16",
+            imageTarget: { kind: "character", characterId: character._id.toString() },
+          },
+        )) as Record<CharacterPose, GeneratedImage>)
+      : await provider!.generateCharacterSheet(sheetInput, context);
+    if (account && !isFlowImageProvider(providerId)) await recordAccountUsage(account.accountId);
 
     const qualityTargets = await resolveQualityTargets(project.activeProfileId, jobDoc.userId);
 

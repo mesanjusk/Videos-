@@ -176,6 +176,19 @@ export const PROVIDER_METADATA: ProviderRuntimeDescriptor[] = [
     notes: "Needs a connected Flow browser session and Chromium on the worker host.",
   },
 
+  {
+    id: "flow-browser",
+    label: "Google Flow (browser images)",
+    capability: "image",
+    execution: "browser-automation",
+    cost: unknownCostPolicy("Drives a signed-in Google account whose plan and quota this application cannot inspect."),
+    requirements: [],
+    flag: "browserFallback",
+    notes:
+      "Generates stills in Flow through the Chrome extension. Needs a connected Flow session; the images it " +
+      "produces are also what Flow's own video generation takes as reference material.",
+  },
+
   // ── Ideogram ──────────────────────────────────────────────────────────────────────────────
   {
     id: "ideogram",

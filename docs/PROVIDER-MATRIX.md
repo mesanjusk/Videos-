@@ -15,6 +15,7 @@ codebase cannot verify the cost, and it behaves exactly like `paid` everywhere. 
 | Gemini (TTS) | voice | Cloud | Paid (free tier then metered) | ✅ | — | — | ❌ | — | a connected Google account, or `GEMINI_API_KEY` | Working |
 | Google Flow (browser) | video | Browser | Unknown | — | ✅ | — | ❌ | `ENABLE_BROWSER_FALLBACK` (**on** by default) | Chromium + a connected Flow session | The default video route. **Selectors unverified** — see below |
 | Google Flow (manual) | video | Manual | Unknown | — | — | — | ❌ | — | none | The fallback when the browser run fails — hands a prompt to a person |
+| Google Flow (browser images) | image | Browser | Unknown | — | ✅ | — | ❌ | `ENABLE_BROWSER_FALLBACK` (**on** by default) | a connected Flow session + the Chrome extension | Stills for scenes and characters. **Selectors unverified** |
 | Ideogram | image | Cloud | Paid | ✅ | — | — | ❌ | `ENABLE_IDEOGRAM` | `IDEOGRAM_API_KEY` | Implemented, untested against the live API |
 | Voicebox | voice | Local service | **Free** | ✅ | — | optional | ✅ | `ENABLE_VOICEBOX` | `VOICEBOX_URL` | Implemented, untested against a live server |
 | Local image worker | image | Local service | **Free** | ✅ | — | ✅ | ✅ | `ENABLE_LOCAL_AI` | `LOCAL_AI_IMAGE_URL` | HTTP contract; needs an adapter |
