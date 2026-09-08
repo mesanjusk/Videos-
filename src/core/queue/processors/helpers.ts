@@ -47,7 +47,12 @@ export async function withJobLifecycle(
     await jobDoc.save();
     return result;
   } catch (err) {
-    if (err instanceof ProviderQuotaExceededError && jobDoc.googleAccountId) {
+    // Benching the account is a cool-down, so it is only right for a quota that will come back. An
+    // allowance of zero never does — the model simply is not on this key's free tier — and taking
+    // the account out of rotation for it disables every *other* model the key can still serve.
+    // Live, that is exactly what happened: an image model with no free tier benched a Gemini
+    // credential whose text calls were succeeding, and every step afterwards reported no account.
+    if (err instanceof ProviderQuotaExceededError && jobDoc.googleAccountId && !err.detail?.allowanceIsZero) {
       const resetsAt = err.retryAfterSeconds ? new Date(Date.now() + err.retryAfterSeconds * 1000) : undefined;
       await markAccountQuotaExceeded(jobDoc.googleAccountId.toString(), resetsAt);
     }

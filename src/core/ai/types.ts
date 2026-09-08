@@ -28,8 +28,21 @@ export class ProviderQuotaExceededError extends Error {
   constructor(
     public readonly providerId: string,
     public readonly retryAfterSeconds?: number,
+    /**
+     * Set when the provider reported an allowance of *zero* for the model, rather than an allowance
+     * that ran out. The two arrive as the same 429 and mean opposite things: one is "come back
+     * later", the other is "this model is not available on this key at all, and waiting changes
+     * nothing". Treating the second as the first is what benched a working account for a model it
+     * was never entitled to use.
+     */
+    public readonly detail?: { model?: string; allowanceIsZero?: boolean },
   ) {
-    super(`Provider "${providerId}" quota exceeded`);
+    super(
+      detail?.allowanceIsZero
+        ? `Provider "${providerId}" allows no free-tier requests for model "${detail.model ?? "unknown"}" — ` +
+          "this is not an exhausted quota. Enable billing for the key, or set a model whose free tier is not zero."
+        : `Provider "${providerId}" quota exceeded`,
+    );
     this.name = "ProviderQuotaExceededError";
   }
 }
