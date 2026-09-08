@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { reconcile, coercePlanShape } from "./director";
+import { reconcile } from "./director";
+import { coerceToSchema } from "./coerce-to-schema";
+import { ASSET_KIND_SYNONYMS } from "./director";
 import { inferPipeline, getPipeline, listPipelines, PRODUCTION_PIPELINES } from "./pipelines";
 import { productionPlanSchema, type ProductionPlan } from "./types";
 
@@ -155,46 +157,67 @@ describe("plan schema", () => {
   });
 });
 
-describe("coercePlanShape", () => {
-  it("reads a near-miss asset kind rather than discarding the whole plan", () => {
-    // The live failure: a complete plan — storyboard, script, cast — thrown away because two asset
-    // requirements said "video_clip" where the enum says "video". On a free tier metered in
-    // requests per day, replacing that plan can cost the rest of the day.
-    const { value, notes } = coercePlanShape({
-      objective: "Explain sehra",
+describe("repairing a model's plan against the schema", () => {
+  const coerce = (raw: unknown) =>
+    coerceToSchema<ProductionPlan>(productionPlanSchema, raw, { synonyms: ASSET_KIND_SYNONYMS });
+
+  it("reads a boolean written as a word", () => {
+    // The live failure this generic pass exists for: voiceRequirements.narration came back as
+    // "yes". The previous version repaired a hand-written list of fields and this one was not on it.
+    const { data, notes } = coerce({ objective: "x", voiceRequirements: { narration: "yes" } });
+
+    expect(data?.voiceRequirements.narration).toBe(true);
+    expect(notes.join(" ")).toContain("narration");
+  });
+
+  it("reads a number written as a string, units and all", () => {
+    const { data } = coerce({ objective: "x", durationSeconds: "60 seconds" });
+    expect(data?.durationSeconds).toBe(60);
+  });
+
+  it("reads a near-miss asset kind", () => {
+    // The earlier live failure: a whole plan discarded because two entries said "video_clip".
+    const { data } = coerce({
+      objective: "x",
       assetRequirements: [
         { kind: "video_clip", description: "groom entering" },
         { kind: "SFX", description: "shehnai" },
       ],
     });
-
-    const plan = productionPlanSchema.parse(value);
-    expect(plan.assetRequirements.map((a) => a.kind)).toEqual(["video", "audio"]);
-    expect(notes).toHaveLength(2);
+    expect(data?.assetRequirements.map((a) => a.kind)).toEqual(["video", "audio"]);
   });
 
-  it("clamps a scene duration into the range the schema accepts", () => {
-    const { value, notes } = coercePlanShape({
-      objective: "x",
-      storyboard: [{ index: 0, visual: "a", durationSeconds: 90 }],
-    });
-
-    expect(productionPlanSchema.parse(value).storyboard.map((s) => s.durationSeconds)).toEqual([60]);
-    expect(notes.join(" ")).toContain("clamped");
+  it("reads a lone value where a list belongs", () => {
+    const { data } = coerce({ objective: "x", scriptPlan: { beats: "open on the bride" } });
+    expect(data?.scriptPlan.beats).toEqual(["open on the bride"]);
   });
 
-  it("leaves a kind it does not recognise alone, so broken output still fails loudly", () => {
-    const { value, notes } = coercePlanShape({
+  it("repairs several unrelated slips in one response", () => {
+    const { data } = coerce({
       objective: "x",
-      assetRequirements: [{ kind: "hologram", description: "?" }],
+      durationSeconds: "45",
+      voiceRequirements: { narration: "true" },
+      musicRequirements: { required: "no" },
+      assetRequirements: [{ kind: "clip", description: "a" }],
     });
 
+    expect(data?.durationSeconds).toBe(45);
+    expect(data?.voiceRequirements.narration).toBe(true);
+    expect(data?.musicRequirements.required).toBe(false);
+    expect(data?.assetRequirements[0]?.kind).toBe("video");
+  });
+
+  it("still fails on a value whose meaning is not obvious", () => {
+    // Guessing here would replace a loud error with a plan that quietly says something nobody
+    // asked for. "sometimes" is not a boolean and must not be invented into one.
+    const { data, issues } = coerce({ objective: "x", voiceRequirements: { narration: "sometimes" } });
+    expect(data).toBeUndefined();
+    expect(issues.length).toBeGreaterThan(0);
+  });
+
+  it("leaves a good plan untouched and reports no repairs", () => {
+    const { data, notes } = coerce({ objective: "Explain sehra", durationSeconds: 60 });
+    expect(data?.durationSeconds).toBe(60);
     expect(notes).toEqual([]);
-    expect(productionPlanSchema.safeParse(value).success).toBe(false);
-  });
-
-  it("passes anything that is not a plan object straight through", () => {
-    expect(coercePlanShape("not a plan").value).toBe("not a plan");
-    expect(coercePlanShape(null).value).toBe(null);
   });
 });

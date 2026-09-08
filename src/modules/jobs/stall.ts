@@ -18,16 +18,35 @@ import type { JobStatus, JobType } from "./models/Job";
  * takes, and only the truly motionless trip them.
  */
 
-const NON_TERMINAL: JobStatus[] = ["queued", "running", "retrying"];
+/**
+ * `manual_pending` is here too, and that is deliberate.
+ *
+ * It means "nothing further happens automatically" — a Flow video waiting for a person, or an image
+ * job parked on a browser mission. Both resume, but neither resumes on its own timetable, and the
+ * poller cannot tell a park from progress: it kept spinning against a job that was, from the user's
+ * side, simply not moving. A park that has outlasted any plausible mission is a stop like any other
+ * and should say so.
+ */
+const NON_TERMINAL: JobStatus[] = ["queued", "running", "retrying", "manual_pending"];
 
 /** Jobs that drive a browser or push pixels through FFmpeg legitimately run for many minutes. */
 const SLOW_JOB_TYPES: JobType[] = ["render", "scene_video", "scene_video_auto", "browser_task", "automation_workflow"];
 
+/**
+ * Jobs that are one API call and nothing else. These take seconds; ten minutes of silence from one
+ * is not lateness, it is a job nothing is running — and waiting ten minutes to say so is most of
+ * the reason "nothing happened" felt like the app was broken rather than stuck.
+ */
+const FAST_JOB_TYPES: JobType[] = ["production_plan", "story", "voice", "instagram_reply", "automation_webhook"];
+
+export const FAST_STALL_AFTER_MS = 3 * 60 * 1000;
 export const STALL_AFTER_MS = 10 * 60 * 1000;
 export const SLOW_STALL_AFTER_MS = 30 * 60 * 1000;
 
 export function stallThresholdFor(type: JobType): number {
-  return SLOW_JOB_TYPES.includes(type) ? SLOW_STALL_AFTER_MS : STALL_AFTER_MS;
+  if (SLOW_JOB_TYPES.includes(type)) return SLOW_STALL_AFTER_MS;
+  if (FAST_JOB_TYPES.includes(type)) return FAST_STALL_AFTER_MS;
+  return STALL_AFTER_MS;
 }
 
 export interface StallCheckInput {
@@ -61,8 +80,15 @@ export function checkStalled(job: StallCheckInput, now: number = Date.now()): St
 export function describeStall(job: StallCheckInput, report: StallReport): string | undefined {
   if (!report.stalled) return undefined;
   const minutes = Math.floor(report.idleMs / 60_000);
-  const waiting = job.status === "queued" ? "has been waiting to start" : `has been ${job.status}`;
 
+  if (job.status === "manual_pending") {
+    return (
+      `This step has been waiting on something outside the app for ${minutes} minutes — a browser ` +
+      "mission or a hand-off that has not come back. Open Queue to see the job and run it again."
+    );
+  }
+
+  const waiting = job.status === "queued" ? "has been waiting to start" : `has been ${job.status}`;
   return (
     `This step ${waiting} for ${minutes} minutes without moving, which is far longer than it should take. ` +
     "Nothing is processing it. Open Queue to see the job and run it again."

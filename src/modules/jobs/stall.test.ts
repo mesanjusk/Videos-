@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkStalled, describeStall, STALL_AFTER_MS, SLOW_STALL_AFTER_MS } from "./stall";
+import { checkStalled, describeStall, STALL_AFTER_MS, SLOW_STALL_AFTER_MS, FAST_STALL_AFTER_MS } from "./stall";
 import { computeProgress } from "@/core/production/progress";
 
 const now = Date.UTC(2026, 8, 7, 12, 0, 0);
@@ -11,9 +11,24 @@ describe("checkStalled", () => {
     expect(report.stalled).toBe(true);
   });
 
+  it("judges a one-API-call job in minutes, not tens of minutes", () => {
+    // A plan job is seconds of work. Ten minutes of silence from one is not lateness, and waiting
+    // ten minutes to say so is most of why a stranded job felt like a broken app.
+    expect(checkStalled({ type: "production_plan", status: "retrying", updatedAt: agedBy(FAST_STALL_AFTER_MS + 1) }, now).stalled).toBe(true);
+    expect(checkStalled({ type: "production_plan", status: "retrying", updatedAt: agedBy(60_000) }, now).stalled).toBe(false);
+  });
+
+  it("catches a job parked on something that never came back", () => {
+    // manual_pending means nothing happens automatically. The poller could not tell that from
+    // progress, so it span against a job that was, from the user's side, simply not moving.
+    const parked = { type: "character_image" as const, status: "manual_pending" as const, updatedAt: agedBy(STALL_AFTER_MS + 1) };
+    expect(checkStalled(parked, now).stalled).toBe(true);
+    expect(describeStall(parked, checkStalled(parked, now))).toContain("waiting on something outside the app");
+  });
+
   it("leaves a job that is merely slow alone", () => {
     // Late is not stuck. Calling a working job dead is its own kind of wrong.
-    expect(checkStalled({ type: "production_plan", status: "running", updatedAt: agedBy(60_000) }, now).stalled).toBe(false);
+    expect(checkStalled({ type: "scene_image", status: "running", updatedAt: agedBy(60_000) }, now).stalled).toBe(false);
   });
 
   it("gives a render far longer before judging it, because a render takes far longer", () => {
