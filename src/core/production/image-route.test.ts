@@ -160,6 +160,17 @@ describe("routeImages", () => {
 });
 
 describe("imageRouteCandidates", () => {
+  it("prefers the browser route when nothing is chosen and Flow is connected", async () => {
+    // The product's visual pipeline is Flow. An image API was the default only because the code was
+    // assembled API-first, and that is how a browser-driven studio died over an image model's tier.
+    mocks.flowSession.value = { accountId: "acc1" };
+    expect((await imageRouteCandidates("u1"))[0]).toBe("flow-browser");
+  });
+
+  it("falls back to the API order when no Flow session exists", async () => {
+    expect((await imageRouteCandidates("u1"))[0]).toBe("gemini");
+  });
+
   it("puts the requested provider first", async () => {
     expect((await imageRouteCandidates("u1", "ideogram"))[0]).toBe("ideogram");
   });

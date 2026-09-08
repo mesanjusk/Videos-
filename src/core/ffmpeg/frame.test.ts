@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
-import { extractFirstFrame } from "./frame";
+import { extractFirstFrame, extractLastFrame } from "./frame";
 
 const execFileAsync = promisify(execFile);
 const FFMPEG_BIN = ffmpegPath as unknown as string;
@@ -18,6 +18,8 @@ const FFMPEG_BIN = ffmpegPath as unknown as string;
  */
 let dir: string;
 let clipPath: string;
+/** Red for half a second, then blue — so the opening and closing frames are provably different. */
+let twoToneClipPath: string;
 
 beforeAll(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "frame-test-"));
@@ -30,7 +32,18 @@ beforeAll(async () => {
     "-pix_fmt", "yuv420p",
     clipPath,
   ]);
-}, 60_000);
+
+  twoToneClipPath = path.join(dir, "two-tone.mp4");
+  await execFileAsync(FFMPEG_BIN, [
+    "-nostdin", "-y",
+    "-f", "lavfi", "-i", "color=c=red:s=320x240:d=1:r=10",
+    "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=1:r=10",
+    "-filter_complex", "[0:v][1:v]concat=n=2:v=1[out]",
+    "-map", "[out]",
+    "-pix_fmt", "yuv420p",
+    twoToneClipPath,
+  ]);
+}, 120_000);
 
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true }).catch(() => {});
@@ -51,6 +64,22 @@ describe("extractFirstFrame", () => {
     // PNG IHDR: width and height are big-endian uint32 at byte 16 and 20.
     expect(frame.data.readUInt32BE(16)).toBe(320);
     expect(frame.data.readUInt32BE(20)).toBe(240);
+  }, 60_000);
+
+  it("really returns the closing frame, not the opening one", async () => {
+    // The property that makes scene-to-scene continuity possible: clip two has to start from where
+    // clip one actually ended. A red-then-blue clip proves the two frames differ.
+    const first = await extractFirstFrame(twoToneClipPath);
+    const last = await extractLastFrame(twoToneClipPath);
+
+    expect(last.data.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(last.data.readUInt32BE(16)).toBe(320);
+    expect(Buffer.compare(first.data, last.data)).not.toBe(0);
+  }, 60_000);
+
+  it("still gives a frame for a clip shorter than the seek window", async () => {
+    const last = await extractLastFrame(clipPath);
+    expect(last.data.length).toBeGreaterThan(0);
   }, 60_000);
 
   it("explains itself when the file is not a video", async () => {
