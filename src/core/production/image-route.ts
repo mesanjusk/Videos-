@@ -72,9 +72,16 @@ function modelFor(providerId: string): string | undefined {
 export async function imageRouteCandidates(userId: string, preferredProviderId?: string | null): Promise<string[]> {
   const registered = PROVIDER_METADATA.filter((d) => d.capability === "image" && isProviderConfigured(d)).map((d) => d.id);
 
+  // With nothing explicitly chosen, the browser route goes first.
+  //
+  // This studio's product is Google Flow: characters, backgrounds and scene stills are drawn there
+  // and then handed to Flow's own video generation as reference material. An image API was never
+  // the point — it was the default only because the pipeline was assembled API-first, which is how
+  // a deployment whose whole visual route is a browser ended up dead over an image model's free
+  // tier. When a Flow session exists, it is the answer.
   const ordered = preferredProviderId
     ? [preferredProviderId, ...registered.filter((id) => id !== preferredProviderId)]
-    : registered;
+    : [BROWSER_IMAGE_PROVIDER_ID, ...registered.filter((id) => id !== BROWSER_IMAGE_PROVIDER_ID)];
 
   const usable: string[] = [];
   for (const id of ordered) {
