@@ -77,13 +77,31 @@ function numberFrom(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/**
+ * A boolean written as prose.
+ *
+ * The exact-word version of this shipped and failed the same day: the model answered a boolean
+ * field with `"yes, narrated in Hindi"`, which is unambiguous to any reader and was refused for not
+ * being in a list. So a leading yes/no/true/false decides it — a sentence that *opens* by answering
+ * the question has answered it, whatever else it goes on to say.
+ *
+ * The leading token is the whole rule. A string that merely contains "no" somewhere ("no music,
+ * narration throughout") must not be read as false, which is exactly what a substring search would
+ * do and why this anchors to the start.
+ */
 function booleanFrom(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value !== "string") return undefined;
-  const word = value.trim().toLowerCase();
-  if (TRUE_WORDS.has(word)) return true;
-  if (FALSE_WORDS.has(word)) return false;
+
+  const text = value.trim().toLowerCase();
+  if (TRUE_WORDS.has(text)) return true;
+  if (FALSE_WORDS.has(text)) return false;
+
+  // "not required" and friends are two words, so the longest phrase wins before the first token.
+  for (const phrase of FALSE_WORDS) if (text.startsWith(`${phrase} `) || text.startsWith(`${phrase},`)) return false;
+  for (const phrase of TRUE_WORDS) if (text.startsWith(`${phrase} `) || text.startsWith(`${phrase},`)) return true;
+
   return undefined;
 }
 

@@ -86,21 +86,43 @@ Constraints:
 Vocabularies you must use exactly, with no other values:
 - assetRequirements[].kind: one of image, video, audio, graphic. A generated clip is "video"; a
   title card, caption plate or overlay is "graphic"; music and sound effects are "audio".
-- each storyboard scene's durationSeconds: a number between 1 and 60.
+- aspectRatio: one of 9:16, 16:9, 1:1, 4:5.
+- renderingPlan.renderer: one of ffmpeg, hyperframes, hybrid.
 
-Produce a JSON object with exactly these keys:
-objective, audience, language, durationSeconds, aspectRatio, platform, tone,
-researchPlan { required, questions[], sensitiveClaims[] },
-scriptPlan { beats[], hook, callToAction, wordBudget },
-storyboard[ { index, visual, narration, camera, emotion, durationSeconds } ],
-characters[ { name, role, description } ],
-assetRequirements[ { kind, description, sceneIndex } ],
-voiceRequirements { narration, language, tone, speaker },
-musicRequirements { required, mood },
-captionRequirements { required, language, style },
-renderingPlan { renderer, width, height, fps },
-qualityRequirements { minSceneDurationSeconds, maxSceneDurationSeconds, characterConsistencyThreshold, requireAudio },
-publishingPlan { publish, platform, viaBrowserAutomation }`;
+Produce a JSON object with exactly these keys and exactly these JSON types. Every field marked
+(boolean) must be literal true or false — never a word, a sentence or a description. Every field
+marked (number) must be a bare number — no units, no quotes.
+
+objective (string), audience (string), language (string), durationSeconds (number),
+aspectRatio (string), platform (string), tone (string),
+
+researchPlan {
+  required (boolean), questions (array of strings), sensitiveClaims (array of strings)
+},
+scriptPlan {
+  beats (array of strings), hook (string), callToAction (string), wordBudget (number)
+},
+storyboard: array of {
+  index (number, starting at 0), visual (string), narration (string — the words to be spoken in
+  this scene), camera (string), emotion (string), durationSeconds (number between 1 and 60)
+},
+characters: array of { name (string), role (string), description (string) },
+assetRequirements: array of { kind (string from the list above), description (string),
+  sceneIndex (number) },
+
+voiceRequirements {
+  narration (BOOLEAN — true if this video is narrated at all, false if it is silent. This is not
+  the narration text; the words belong in each storyboard scene's narration field),
+  language (string), tone (string), speaker (string)
+},
+musicRequirements { required (boolean), mood (string) },
+captionRequirements { required (boolean), language (string), style (string) },
+renderingPlan { renderer (string from the list above), width (number), height (number), fps (number) },
+qualityRequirements {
+  minSceneDurationSeconds (number), maxSceneDurationSeconds (number),
+  characterConsistencyThreshold (number between 0 and 1), requireAudio (boolean)
+},
+publishingPlan { publish (boolean), platform (string), viaBrowserAutomation (boolean) }`;
 }
 
 /**
