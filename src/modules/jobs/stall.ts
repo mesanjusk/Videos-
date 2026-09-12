@@ -43,7 +43,23 @@ export const FAST_STALL_AFTER_MS = 3 * 60 * 1000;
 export const STALL_AFTER_MS = 10 * 60 * 1000;
 export const SLOW_STALL_AFTER_MS = 30 * 60 * 1000;
 
-export function stallThresholdFor(type: JobType): number {
+/**
+ * A park is judged on a different clock from a running job.
+ *
+ * `manual_pending` means the next move belongs to something outside this application — a person,
+ * or a browser drawing an image in Flow. Neither keeps to our timetable, and the ten-minute default
+ * for an image job was measured against an API call that takes seconds: a character sheet of eight
+ * poses is eight browser missions run one after another in one Chrome tab, which passes ten minutes
+ * while working perfectly. Calling that stuck is worse than saying nothing, because the retry it
+ * offers cancels the job the missions are going to come back to.
+ *
+ * So a park gets the slow clock. Still bounded — a park nothing will ever answer must eventually
+ * say so, which is the whole reason `manual_pending` is in `NON_TERMINAL` at all.
+ */
+export const PARKED_STALL_AFTER_MS = 45 * 60 * 1000;
+
+export function stallThresholdFor(type: JobType, status?: JobStatus): number {
+  if (status === "manual_pending") return PARKED_STALL_AFTER_MS;
   if (SLOW_JOB_TYPES.includes(type)) return SLOW_STALL_AFTER_MS;
   if (FAST_JOB_TYPES.includes(type)) return FAST_STALL_AFTER_MS;
   return STALL_AFTER_MS;
@@ -67,7 +83,7 @@ export function checkStalled(job: StallCheckInput, now: number = Date.now()): St
   const idleMs = Number.isNaN(updatedAt) ? 0 : Math.max(0, now - updatedAt);
 
   if (!NON_TERMINAL.includes(job.status)) return { stalled: false, idleMs };
-  return { stalled: idleMs >= stallThresholdFor(job.type), idleMs };
+  return { stalled: idleMs >= stallThresholdFor(job.type, job.status), idleMs };
 }
 
 /**

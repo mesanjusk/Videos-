@@ -114,11 +114,23 @@ export function buildGoogleFlowImageMission(input: BuildGoogleFlowImageMissionIn
       retryable: false,
     },
     {
-      id: "download-image",
-      action: "download_file",
+      // Reads the result out of the page rather than clicking Download.
+      //
+      // A Chrome download goes to the operator's own Downloads folder, which this application
+      // cannot read, and the URL Chrome reports having fetched it from is either a `blob:` scoped
+      // to a page that is about to close or an authenticated Google URL that answers nobody else.
+      // So the mission used to finish with the image out of reach and the job waiting for it dying
+      // one step later. Captured inside the page, where the session's cookies apply, the bytes come
+      // back through POST /api/browser-automation/extension/tasks/:id/result and land in this
+      // deployment's own storage.
+      //
+      // The selector is the result element itself, not a control: whatever the page is displaying
+      // is what the prompt produced.
+      id: "capture-image",
+      action: "capture_result",
       stage: "exporting",
       params: {
-        selector: `${FLOW_SELECTORS.imageDownloadButton}, ${FLOW_SELECTORS.downloadButton}`,
+        selector: `${FLOW_SELECTORS.resultImage}, ${FLOW_SELECTORS.resultVideo}`,
         fileName,
       },
       timeoutMs: FLOW_TIMEOUTS_MS.download,

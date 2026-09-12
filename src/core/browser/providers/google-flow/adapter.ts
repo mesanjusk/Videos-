@@ -184,6 +184,15 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
         const probe = await probePage(page, typeof params.limit === "number" ? params.limit : undefined);
         return { probe: probe as unknown as Record<string, unknown> };
       }
+      case "capture_result": {
+        // The extension's reason for this action is that a Chrome download is unreachable from the
+        // server (see build-image-mission.ts). Playwright has no such problem — but a mission is
+        // data, and the same mission may be handed to either runner, so this implements the same
+        // verb rather than failing on it. Read in the page, where the session's cookies apply,
+        // then written to the run's own output directory like any other download.
+        const path = await this.captureResult(page, step);
+        return { downloadPath: path };
+      }
       case "wait_for_state": {
         const { screen, newClipIds } = await this.waitForScreen(page, step);
         // The clip id goes into the step's output, so a run that downloaded the wrong video can be
@@ -193,6 +202,41 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
       default:
         throw new Error(`Unsupported action for google-flow: ${step.action}`);
     }
+  }
+
+  /**
+   * The bytes of the result the page is displaying, saved where the caller can find them.
+   *
+   * `fetch` runs inside the page for the same reason the extension does it there: a generated
+   * result is served from a `blob:` that exists only in that document, or from a URL that answers
+   * only a request carrying the session's own cookies. Base64 is the transport because that is what
+   * survives `page.evaluate`'s serialization.
+   */
+  private async captureResult(page: Page, step: TaskStep): Promise<string> {
+    const selector = requireSelector(step.params.selector, step);
+    const captured = await page.evaluate(async (sel) => {
+      const el = document.querySelector(sel) as (HTMLImageElement | HTMLVideoElement) | null;
+      const src = el?.currentSrc || el?.getAttribute("src") || el?.querySelector?.("source[src]")?.getAttribute("src");
+      if (!src) return null;
+      const response = await fetch(src, { credentials: "include" });
+      if (!response.ok) return null;
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < buffer.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, Array.from(buffer.subarray(i, i + 8192)));
+      }
+      return { base64: btoa(binary), mimeType: response.headers.get("content-type") ?? "" };
+    }, selector);
+
+    if (!captured?.base64) {
+      throw new Error(`Step ${step.id} (capture_result) found no readable result at ${selector}`);
+    }
+
+    const dir = await mkdtemp(join(tmpdir(), "flow-capture-"));
+    const name = typeof step.params.fileName === "string" && step.params.fileName ? step.params.fileName : "flow-result";
+    const path = join(dir, name.replace(/[^a-zA-Z0-9._-]/g, "_") || "flow-result");
+    await writeFile(path, Buffer.from(captured.base64, "base64"));
+    return path;
   }
 
   /** Flow's own screens, so a `wait_for_state` step can wait on a meaning. See ./state.ts. */

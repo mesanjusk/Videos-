@@ -111,6 +111,12 @@ async function executeTask(run) {
         continue;
       }
 
+      if (step.action === "capture_result") {
+        const download = await captureResult(taskId, tabId, step, step.timeoutMs || 120000);
+        if (download) downloads.push(download);
+        continue;
+      }
+
       const payload = {
         action: step.action,
         selector: step.params.selector,
@@ -435,6 +441,65 @@ async function uploadAssets(tabId, step, metadata) {
 
   result = await sendPageAction(tabId, { action: "upload_commit", uploadId }, step.timeoutMs || 30000);
   if (!result.success) throw new Error(result.error || `Upload commit failed at ${step.id}`);
+}
+
+/**
+ * Reads the result out of the page and hands the bytes to the Videos app.
+ *
+ * The step this replaces clicked Download and reported where Chrome had fetched the file from. That
+ * cannot work: the file lands in a Downloads folder the server cannot read, and the URL Chrome
+ * reports is a `blob:` belonging to a page about to close, or a Google URL that answers only a
+ * request carrying this operator's cookies. A mission would report success and the job waiting for
+ * the image would die one step later, trying to fetch something nobody else can see.
+ *
+ * So the content script reads it where those cookies apply, streams it here in chunks, and this
+ * posts it to the app. The URL that comes back points at the deployment's own storage, which is
+ * what `downloads[].url` was always supposed to mean.
+ */
+async function captureResult(taskId, tabId, step, timeoutMs) {
+  const begin = await sendPageAction(
+    tabId,
+    { action: "capture_begin", selector: step.params.selector, optional: step.params.optional === true },
+    timeoutMs,
+  );
+  if (!begin.success) {
+    if (step.params.optional === true || step.optional === true) return null;
+    throw new Error(begin.error || "Could not capture the Flow result");
+  }
+  // An optional step whose element was missing reports success with nothing to collect. Reading its
+  // (absent) chunk count as zero would then fail the run on a size mismatch against `undefined` —
+  // the opposite of what optional means.
+  if (!begin.captureId) return null;
+
+  const parts = [];
+  try {
+    for (let index = 0; index < begin.chunkCount; index += 1) {
+      const chunk = await sendPageAction(tabId, { action: "capture_chunk", captureId: begin.captureId, chunkIndex: index }, 30000);
+      if (!chunk.success) throw new Error(chunk.error || `Capture chunk ${index} failed`);
+      parts.push(base64ToBytes(chunk.base64));
+    }
+  } finally {
+    await sendPageAction(tabId, { action: "capture_end", captureId: begin.captureId }, 5000).catch(() => {});
+  }
+
+  const size = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  if (size !== begin.size) throw new Error(`Captured ${size} bytes but the page reported ${begin.size}`);
+
+  const fileName = step.params.fileName || `flow-result-${Date.now()}`;
+  const stored = await api(`/api/browser-automation/extension/tasks/${taskId}/result`, {
+    method: "POST",
+    headers: { "content-type": begin.mimeType || "application/octet-stream", "x-file-name": fileName },
+    body: new Blob(parts, { type: begin.mimeType || "application/octet-stream" }),
+  });
+  return stored.download;
+}
+
+/** Mirrors the content script's decoder — the service worker reassembles what the page sent. */
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 function fileNameFromUrl(url, index) {

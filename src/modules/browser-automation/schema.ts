@@ -9,7 +9,7 @@ const taskStepSchema = z.object({
     "upload_file", "upload_url", "download_file",
     "scroll", "drag", "wait", "sleep",
     "screenshot", "capture_html", "capture_dom",
-    "probe_page", "wait_for_state",
+    "probe_page", "wait_for_state", "capture_result",
   ]),
   params: z.record(z.string(), z.unknown()).default({}),
   stage: z.enum(BROWSER_TASK_STAGES).optional(),

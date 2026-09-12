@@ -211,7 +211,10 @@ export class DefaultTaskEngine implements TaskEngine {
       // ProviderAdapter.executeAction's doc comment) rather than a placeholder — falls back to one
       // only if a provider genuinely didn't report one, so this stays non-breaking for adapters
       // that predate the extension.
-      if (step.action === "download_file") {
+      // `capture_result` is a download by another route — the file arrives by being read out of the
+      // page rather than saved by the browser — so a run's `downloads` must contain it too, or a
+      // caller that asked for a clip gets an empty result and calls the run a failure.
+      if (step.action === "download_file" || step.action === "capture_result") {
         downloads.push({ path: (result.output?.downloadPath as string) ?? `download-${step.id}` });
       }
       if (step.action === "screenshot") {

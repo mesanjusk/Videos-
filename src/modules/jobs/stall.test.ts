@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { checkStalled, describeStall, STALL_AFTER_MS, SLOW_STALL_AFTER_MS, FAST_STALL_AFTER_MS } from "./stall";
+import {
+  checkStalled,
+  describeStall,
+  STALL_AFTER_MS,
+  SLOW_STALL_AFTER_MS,
+  FAST_STALL_AFTER_MS,
+  PARKED_STALL_AFTER_MS,
+} from "./stall";
 import { computeProgress } from "@/core/production/progress";
 
 const now = Date.UTC(2026, 8, 7, 12, 0, 0);
@@ -21,9 +28,25 @@ describe("checkStalled", () => {
   it("catches a job parked on something that never came back", () => {
     // manual_pending means nothing happens automatically. The poller could not tell that from
     // progress, so it span against a job that was, from the user's side, simply not moving.
-    const parked = { type: "character_image" as const, status: "manual_pending" as const, updatedAt: agedBy(STALL_AFTER_MS + 1) };
+    const parked = {
+      type: "character_image" as const,
+      status: "manual_pending" as const,
+      updatedAt: agedBy(PARKED_STALL_AFTER_MS + 1),
+    };
     expect(checkStalled(parked, now).stalled).toBe(true);
     expect(describeStall(parked, checkStalled(parked, now))).toContain("waiting on something outside the app");
+  });
+
+  it("does not call a park stuck on the clock of the API call it replaced", () => {
+    // A character sheet of eight poses is eight browser missions in one Chrome tab: it passes the
+    // ten-minute default while working perfectly, and the retry offered for it cancels the very job
+    // the missions are coming back to.
+    const parked = {
+      type: "character_image" as const,
+      status: "manual_pending" as const,
+      updatedAt: agedBy(STALL_AFTER_MS + 60_000),
+    };
+    expect(checkStalled(parked, now).stalled).toBe(false);
   });
 
   it("leaves a job that is merely slow alone", () => {
