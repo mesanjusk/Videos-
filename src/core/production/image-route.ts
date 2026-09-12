@@ -4,7 +4,7 @@ import type { GeneratedImage, ImageProvider } from "@/core/ai/types";
 import { ProviderQuotaExceededError } from "@/core/ai/types";
 import { getImageProvider, BROWSER_IMAGE_PROVIDER_ID } from "@/core/ai/registry";
 import { PROVIDER_METADATA, isProviderConfigured, GEMINI_REQUIREMENT } from "@/core/ai/provider-metadata";
-import { markModelUnavailable, isModelUnavailable } from "@/core/ai/provider-health";
+import { markModelUnavailable, isModelUnavailable, unavailableReason, UNAVAILABLE_TTL_SECONDS } from "@/core/ai/provider-health";
 import { resolveFlowImages, FlowMissionPendingError, type FlowImageRequest, type FlowImageOptions } from "./flow-image-step";
 import { findAccountWithFlowSession, describePooledGeminiCredential } from "@/modules/accounts/service";
 
@@ -58,6 +58,20 @@ async function browserRouteUsable(userId: string): Promise<boolean> {
   return account !== null;
 }
 
+/**
+ * The way out of an API dead end that costs nothing, named wherever a dead end is reported.
+ *
+ * Every message here used to end at "enable billing, or switch provider in Settings", which quietly
+ * omits the route this studio is actually built around: Flow draws images in a browser with no API
+ * allowance involved at all. When no Flow session is connected, that is one setup step standing
+ * between a stuck pipeline and a working one — the same step `core/production/progress.ts` already
+ * puts a button on — and a failure message that does not mention it sends an operator to a billing
+ * page they may not need.
+ */
+const FLOW_ROUTE_HINT =
+  " Google Flow can draw these in a browser instead, with no API allowance involved: connect a " +
+  "Google account's Flow browser session on the Accounts page to enable that route.";
+
 /** Never throws — an unreadable account pool reports "none", which sends the reader to the env var. */
 async function geminiCredentialState(userId: string): Promise<"usable" | "unusable" | "none"> {
   return describePooledGeminiCredential(userId).catch(() => "none" as const);
@@ -71,6 +85,21 @@ async function geminiCredentialState(userId: string): Promise<"usable" | "unusab
  * which is both untrue and unhelpful — the accounts are there, they are just not usable right now.
  */
 async function explainNoImageRoute(userId: string): Promise<string> {
+  // A model benched by a refusal it already reported is the most misleading case of all: the
+  // credential is present and correct, so "nothing is configured" sends an operator to check
+  // configuration that is fine. Say what was refused, why, and that it re-tests itself.
+  const benched = await unavailableReason("gemini", modelFor("gemini")).catch(() => null);
+  if (benched) {
+    return (
+      `The image model this deployment uses (${modelFor("gemini")}) was refused outright the last time it was ` +
+      `tried, and no other image route is configured. Google's answer was: ${benched} ` +
+      `That is remembered for ${UNAVAILABLE_TTL_SECONDS / 3600}h and then re-tested automatically — it is a fact ` +
+      "about this API key's billing, not a quota that waiting fixes. Enable billing for that model on the key's " +
+      "Google project, or configure another route." +
+      ((await browserRouteUsable(userId)) ? "" : FLOW_ROUTE_HINT)
+    );
+  }
+
   if ((await geminiCredentialState(userId)) === "unusable") {
     return (
       "No image provider can serve this right now: every connected Google account is switched off or over the " +
@@ -162,9 +191,22 @@ export async function routeImages(
       if (err instanceof FlowMissionPendingError) throw err;
 
       if (isStructuralRefusal(err)) {
-        const model = err.detail?.model ?? modelFor(providerId);
-        await markModelUnavailable(providerId, model, err.message);
-        refused.push(`${providerId}${model ? ` (${model})` : ""}`);
+        // Under every name this refusal goes by.
+        //
+        // Google does not always name the model that was asked for: a request for
+        // `gemini-2.5-flash-image` comes back refused under its preview id, because that is what
+        // the free-tier quota is registered as. The note used to be written under the reported name
+        // alone, while `imageRouteCandidates` only ever checks the *requested* one — so on exactly
+        // the deployment this mechanism exists for, the record went into a key nobody reads and
+        // every later job spent another doomed request rediscovering the same refusal.
+        const reported = err.detail?.model;
+        const requested = modelFor(providerId);
+        const named = [...new Set([requested, reported].filter((m): m is string => Boolean(m)))];
+        for (const model of named.length > 0 ? named : [undefined]) {
+          await markModelUnavailable(providerId, model, err.message);
+        }
+        const label = reported ?? requested;
+        refused.push(`${providerId}${label ? ` (${label})` : ""}`);
         continue;
       }
 
@@ -177,7 +219,8 @@ export async function routeImages(
   throw new Error(
     `Every image provider refused this request outright: ${refused.join(", ")}. ` +
       "These are not exhausted quotas — the models are not available on this configuration. " +
-      "Enable billing, choose a different model, or switch the image provider in Settings.",
+      "Enable billing, choose a different model, or switch the image provider in Settings." +
+      ((await browserRouteUsable(jobDoc.userId)) ? "" : FLOW_ROUTE_HINT),
   );
 }
 
