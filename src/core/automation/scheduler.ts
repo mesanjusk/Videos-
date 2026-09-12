@@ -4,6 +4,7 @@ import { Schedule } from "@/modules/automation/models/Schedule";
 import { Automation } from "@/modules/automation/models/Automation";
 import { Workflow } from "@/modules/automation/models/Workflow";
 import { runAutomation } from "@/modules/automation/service";
+import { sweepAbandonedMissions } from "@/core/queue/worker-runtime";
 
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -49,6 +50,13 @@ export function startScheduler(): NodeJS.Timeout {
   const tick = async () => {
     try {
       await connectToDatabase();
+
+      // A minute is the finest granularity anything here has, and a mission whose extension died is
+      // exactly the kind of thing a once-a-minute sweep is for. The serverless tick runs this too
+      // (see core/queue/worker-runtime.ts) — a deployment may have one runtime, the other, or both,
+      // and the sweep is idempotent, so it belongs in each rather than in whichever is assumed.
+      await sweepAbandonedMissions().catch((err) => console.error("[scheduler] mission sweep failed:", err));
+
       const due = await Schedule.find({ enabled: true, nextRunAt: { $lte: new Date() } }).limit(100);
 
       for (const schedule of due) {

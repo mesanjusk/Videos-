@@ -26,12 +26,23 @@ interface RunLike {
 }
 
 export async function wakeImageJobForRun(run: RunLike): Promise<string | null> {
-  const target = run.taskDefinition?.metadata?.imageTarget as { jobId?: string } | undefined;
-  const jobId = target?.jobId;
-  if (!jobId) return null;
-
   await connectToDatabase();
-  const job = await Job.findById(jobId).lean();
+  const runId = String(run._id);
+
+  // Whichever job is parked on this mission *now* — not necessarily the one that started it.
+  //
+  // The mission records the job id that created it, and that used to be the only way back. But a
+  // park that outlasts the stall threshold gets a "Try again", and running a stalled job again
+  // marks the original cancelled and continues as a new job carrying the same mission ids. The
+  // recorded id then points at a cancelled job, this returned null, and when the missions finally
+  // finished nothing woke the job that was still waiting for them — the one failure mode a retry
+  // was supposed to fix. So the lookup follows the missions rather than the id, and falls back to
+  // the recorded id for jobs parked before this list existed.
+  const target = run.taskDefinition?.metadata?.imageTarget as { jobId?: string } | undefined;
+  const job =
+    (await Job.findOne({ "payload.flowRunIdList": runId, status: "manual_pending" }).sort({ createdAt: -1 }).lean()) ??
+    (target?.jobId ? await Job.findById(target.jobId).lean() : null);
+
   // Only a job that actually parked on this. A completed or failed one has moved past it, and a
   // running one is already being served by something else.
   if (!job || job.status !== "manual_pending") return null;
@@ -45,6 +56,7 @@ export async function wakeImageJobForRun(run: RunLike): Promise<string | null> {
   const allSettled = flowRunIds.length === runs.length && runs.every((r) => r.stage === "completed" || r.stage === "failed");
   if (!allSettled) return null;
 
+  const jobId = job._id.toString();
   const resumed = await enqueueJob({
     userId: job.userId,
     projectId: job.projectId ? String(job.projectId) : undefined,
@@ -58,4 +70,23 @@ export async function wakeImageJobForRun(run: RunLike): Promise<string | null> {
 
   console.log(`[flow-image] missions for job ${jobId} finished — resumed as ${resumed._id}`);
   return resumed._id.toString();
+}
+
+/**
+ * Wakes whatever is parked on each of these runs, best-effort.
+ *
+ * Used by the sweeps that fail missions an extension abandoned: marking the run failed is only half
+ * the repair — the job parked on it has to be told, or it waits out its own stall threshold and
+ * offers a retry that inherits the same dead missions. One failure does not stop the rest.
+ */
+export async function wakeImageJobsForRuns(runs: RunLike[]): Promise<number> {
+  let woken = 0;
+  for (const run of runs) {
+    const resumed = await wakeImageJobForRun(run).catch((err) => {
+      console.error(`[flow-image] could not wake the job parked on run ${String(run._id)}:`, err);
+      return null;
+    });
+    if (resumed) woken += 1;
+  }
+  return woken;
 }

@@ -34,6 +34,29 @@ POST already-planned scenes to:
 
 The route accepts `scenes`, optional `sharedAssets`, per-scene `referenceAssets`, `aspectRatio`, `language`, and `outputFileName`. It intentionally performs no Gemini call; planning stays upstream in the Videos production engine.
 
+## Returning the result
+
+A `capture_result` step is how a mission hands its output back. The content script fetches the
+result's own source **inside the Flow page**, where the session's cookies apply, streams the bytes to
+the service worker in 256 KiB chunks, and the service worker posts them to:
+
+`POST /api/browser-automation/extension/tasks/<id>/result`
+
+with the file's media type as `content-type` and its name in `x-file-name`. The app stores them
+through its own storage provider and records the resulting URL on the run's `downloads`, which is
+what the parked image job collects when it resumes.
+
+This replaced `download_file` for image missions, and the reason is worth keeping in mind when
+writing new ones: a Chrome download lands in the operator's Downloads folder, which the Videos
+server cannot read, and the URL Chrome reports fetching it from is either a `blob:` scoped to a page
+that is about to close or an authenticated Google URL that answers no other request. A mission built
+that way completes with its output unreachable.
+
+Two limits are real. A result the server stores this way is capped at 4MB, which suits stills and
+not long clips — video generation does not come through the extension; it runs on the worker, where
+Playwright writes files to a disk the server owns. And a `<video>` fed by MediaSource cannot be
+captured at all (its `blob:` URL is not a Blob); the step fails saying so rather than guessing.
+
 ## Reference image/video uploads
 
 Both `upload_file` and `upload_url` are supported by the extension. `upload_url` is the normal Videos handoff: the service worker fetches each asset with extension host permissions, transfers it to the Flow content script in 256 KiB chunks, reconstructs a browser `File`, puts it into a `DataTransfer`, assigns the result to Flow's `input[type=file]`, and dispatches `input` and `change` events.

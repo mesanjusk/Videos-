@@ -100,7 +100,10 @@ export async function resolveFlowImages(
       started[request.key] = runId;
     }
 
-    jobDoc.set("payload", { ...(jobDoc.payload ?? {}), flowRunIds: started });
+    // `flowRunIdList` is the same ids as a flat array, purely so a query can find this job by one
+    // of its missions — Mongo cannot match the values of an arbitrary-keyed object without an
+    // aggregation, and the wake path needs that lookup to survive a retry (see flow-image-wake.ts).
+    jobDoc.set("payload", { ...(jobDoc.payload ?? {}), flowRunIds: started, flowRunIdList: Object.values(started) });
     await jobDoc.save();
     throw new FlowMissionPendingError(Object.values(started));
   }

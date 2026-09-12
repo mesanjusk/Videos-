@@ -29,7 +29,16 @@ export type ActionType =
   | "probe_page"
   // Polls the provider's own reading of which screen is displayed, rather than sleeping or waiting
   // on one selector. A provider opts in by implementing `ProviderAdapter.classifyState`.
-  | "wait_for_state";
+  | "wait_for_state"
+  // Reads the bytes of a result the page is *displaying* and returns them to the application,
+  // rather than saving a file wherever the runner happens to be running.
+  //
+  // `download_file` is not a substitute on the extension: a Chrome download lands in the operator's
+  // own Downloads folder, which the server cannot read, and the URL it reports back is either a
+  // `blob:` (meaningless off that page) or an authenticated Google URL the server cannot fetch. So
+  // an extension mission could complete with a picture nobody could collect. Capturing inside the
+  // page — where the session's own cookies apply — is the only place those bytes are reachable.
+  | "capture_result";
 
 export type BrowserTaskStage =
   | "pending"

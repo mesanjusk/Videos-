@@ -2,6 +2,8 @@
   if (window.__VIDEOS_FLOW_EXECUTOR_INSTALLED__) return;
   window.__VIDEOS_FLOW_EXECUTOR_INSTALLED__ = true;
   const pendingUploads = new Map();
+  const pendingCaptures = new Map();
+  const CAPTURE_CHUNK_SIZE = 256 * 1024;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "VIDEOS_FLOW_ACTION") return false;
@@ -40,6 +42,65 @@
       const file = upload.files.find((item) => item.fileId === payload.fileId);
       if (!file) return { success: false, error: "Unknown upload file" };
       file.chunks[payload.chunkIndex] = payload.base64;
+      return { success: true };
+    }
+
+    // ── Capturing a result ──────────────────────────────────────────────────────────────────────
+    //
+    // The bytes of whatever Flow is displaying, read here rather than downloaded.
+    //
+    // This has to happen in the page. A generated result is served either from a `blob:` URL, which
+    // only exists inside this document, or from a Google URL that answers only a request carrying
+    // this session's cookies — and the service worker has neither. `chrome.downloads` was the old
+    // answer and it puts the file on the operator's disk, where the application that asked for it
+    // cannot reach it.
+    //
+    // Chunked back the same way uploads come in, because one runtime message carrying several
+    // megabytes of base64 is how you find the message size limit the hard way.
+    if (action === "capture_begin") {
+      const el = await waitForElement(payload.selector, 30000);
+      if (!el) return optionalOrError(payload, `No result element to capture: ${payload.selector}`);
+
+      const src = el.currentSrc || el.src || el.querySelector?.("source[src]")?.src || "";
+      if (!src) return optionalOrError(payload, "The result element has no source to read");
+      // A <video> fed by MediaSource has a blob: URL that is not a Blob and cannot be fetched. Say
+      // so precisely — it is a real limit of this approach, not a mystery failure.
+      if (el instanceof HTMLMediaElement && src.startsWith("blob:") && !el.src) {
+        return { success: false, error: "This result is a streamed video, which cannot be captured from the page." };
+      }
+
+      let blob;
+      try {
+        const response = await fetch(src, { credentials: "include" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        blob = await response.blob();
+      } catch (error) {
+        return { success: false, error: `Could not read the result from the page: ${error.message}` };
+      }
+      if (!blob.size) return { success: false, error: "The result read back empty" };
+
+      const captureId = payload.captureId || crypto.randomUUID();
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      pendingCaptures.set(captureId, bytes);
+      return {
+        success: true,
+        captureId,
+        size: bytes.byteLength,
+        mimeType: blob.type || mimeFromSrc(src),
+        chunkSize: CAPTURE_CHUNK_SIZE,
+        chunkCount: Math.ceil(bytes.byteLength / CAPTURE_CHUNK_SIZE),
+      };
+    }
+
+    if (action === "capture_chunk") {
+      const bytes = pendingCaptures.get(payload.captureId);
+      if (!bytes) return { success: false, error: "Unknown capture session" };
+      const start = Number(payload.chunkIndex) * CAPTURE_CHUNK_SIZE;
+      return { success: true, base64: bytesToBase64(bytes.subarray(start, start + CAPTURE_CHUNK_SIZE)) };
+    }
+
+    if (action === "capture_end") {
+      pendingCaptures.delete(payload.captureId);
       return { success: true };
     }
 
@@ -188,6 +249,24 @@
   function findEditable(el) {
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable) return el;
     return el.querySelector?.("textarea, input:not([type=hidden]), [contenteditable=true], [role=textbox]") || el;
+  }
+
+  /** Chunk-sized, so the intermediate string never approaches an argument-count limit. */
+  function bytesToBase64(bytes) {
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 8192) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+    }
+    return btoa(binary);
+  }
+
+  /** Last-resort media type, when the response carried none. */
+  function mimeFromSrc(src) {
+    if (/\.png(\?|#|$)/i.test(src)) return "image/png";
+    if (/\.jpe?g(\?|#|$)/i.test(src)) return "image/jpeg";
+    if (/\.webp(\?|#|$)/i.test(src)) return "image/webp";
+    if (/\.mp4(\?|#|$)/i.test(src)) return "video/mp4";
+    return "application/octet-stream";
   }
 
   function base64ToBytes(base64) {

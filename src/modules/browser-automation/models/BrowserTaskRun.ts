@@ -20,7 +20,10 @@ const browserTaskRunSchema = new Schema(
     totalSteps: { type: Number, default: 0 },
     error: { type: String },
     retryCount: { type: Number, default: 0 },
-    downloads: [{ path: { type: String, required: true }, url: { type: String } }],
+    // `url` is what the application can actually read the result from — set when the extension posts
+    // the bytes back (see extension-service.ts#recordExtensionResult), which is the only way they
+    // get off the operator's machine. `bytes` is what arrived, for a run that has to be diagnosed.
+    downloads: [{ path: { type: String, required: true }, url: { type: String }, bytes: { type: Number } }],
     resultMetadata: { type: Schema.Types.Mixed },
     screenshots: [{ type: String }],
     startedAt: { type: Date },
