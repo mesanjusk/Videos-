@@ -54,7 +54,9 @@ export function buildGoogleFlowVideoTask({ promptText, referenceImageUrls = [], 
     {
       id: "await-prompt",
       action: "wait_for_state",
-      params: { states: ["PROMPT_READY", "WORKSPACE"] },
+      // Snapshots the clips already on the page, before anything is generated — see requireNewClip
+      // on await-clip below, and the app-side copy in src/core/browser/providers/google-flow.
+      params: { states: ["PROMPT_READY", "WORKSPACE"], recordClips: true },
       timeoutMs: FLOW_TIMEOUTS_MS.interaction * 4,
     },
     { id: "probe", action: "probe_page", params: {} },
@@ -78,7 +80,9 @@ export function buildGoogleFlowVideoTask({ promptText, referenceImageUrls = [], 
     {
       id: "await-clip",
       action: "wait_for_state",
-      params: { state: "CLIP_READY", pollMs: 5000 },
+      // "this run produced a clip", not "a clip is on screen": a project that already holds one is
+      // CLIP_READY the instant it loads, and downloading that one attaches the wrong video.
+      params: { state: "CLIP_READY", pollMs: 5000, requireNewClip: true },
       timeoutMs: FLOW_TIMEOUTS_MS.render,
       retryable: false,
     },

@@ -124,14 +124,43 @@ export class PlaywrightActionEngine implements ActionEngine {
     await locator.fill(await this.text(text));
   }
 
+  /**
+   * Enters text the way a person does, and checks that it landed.
+   *
+   * This used to assign `el.value` / `el.textContent` inside `locator.evaluate` and stop there. On
+   * a plain HTML form that works; on any React-backed product it does not, and every target this
+   * engine drives is one. Assigning `.value` bypasses React's own value setter and dispatches no
+   * event at all, so `onChange` never fires and the component's state stays empty — the text is
+   * visible in the DOM and, as far as the application is concerned, was never typed. Google Flow
+   * gates its Generate button on that state, so the click that follows lands on a disabled control,
+   * `expectChange` reports "no visible effect", and a run that was one step from a clip degrades to
+   * the manual hand-off. Confirmed against `extension/content/executor.js#setText`, which has
+   * always dispatched real `InputEvent`s and is the reason the extension path does not suffer this.
+   *
+   * `fill()` drives Playwright's own input pipeline (a real focus, a real input event), which is
+   * what makes a controlled component update. Two fallbacks behind it, because a rich-text editor
+   * can refuse `fill()` outright (Lexical, ProseMirror) or accept it and keep its own model: a
+   * refusal falls through to real keystrokes, and so does a fill that silently left the field
+   * empty. `classifyTextEntry` is what turns the second case from an invisible failure into a retype.
+   */
   async paste(page: Page, selector: SelectorInput, text: string): Promise<void> {
     const { locator } = await this.locator(page, selector);
     const value = await this.text(text);
     await locator.click();
-    await locator.evaluate((el, v) => {
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.value = v;
-      else el.textContent = v;
-    }, value);
+
+    try {
+      await locator.fill(value);
+      // "unknown" (nothing readable came back) is deliberately trusted rather than retyped: a
+      // successful fill against an element this engine cannot read is far more likely than a
+      // silent one, and typing a five-line prompt twice into a box that took it the first time is
+      // its own kind of broken.
+      if ((await classifyTextEntry(locator, value)) !== "empty") return;
+    } catch {
+      // fill() refused this element — fall through and type.
+    }
+
+    // Real keystrokes. Slower, and the one thing no editor can ignore.
+    await locator.pressSequentially(value);
   }
 
   async keyboardShortcut(page: Page, keys: string): Promise<void> {
@@ -197,6 +226,31 @@ export class PlaywrightActionEngine implements ActionEngine {
   async captureDom(page: Page): Promise<string> {
     return page.evaluate(() => document.documentElement.outerHTML);
   }
+}
+
+/** Just enough of a Playwright `Locator` to read back what a field now holds. */
+export interface TextReadable {
+  inputValue(): Promise<string>;
+  textContent(): Promise<string | null>;
+}
+
+/**
+ * Whether text entry actually took, as far as the page will admit.
+ *
+ * Deliberately only detects the one case worth acting on: a field that is *empty* after being
+ * filled, which is what a rich-text editor that rejected the value looks like. Any non-empty
+ * value counts as applied — an editor is free to normalize whitespace, strip a newline or wrap the
+ * text, and comparing for equality would send `paste` into retyping a prompt that is already
+ * correctly in the box. `"unknown"` means neither read worked, which is not evidence of failure.
+ */
+export async function classifyTextEntry(
+  locator: TextReadable,
+  expected: string,
+): Promise<"applied" | "empty" | "unknown"> {
+  const read = await locator.inputValue().catch(() => locator.textContent().catch(() => null));
+  if (read === null) return "unknown";
+  if (read.trim().length > 0) return "applied";
+  return expected.trim().length === 0 ? "applied" : "empty";
 }
 
 export function safeFileName(name: string): string {

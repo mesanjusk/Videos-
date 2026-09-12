@@ -109,6 +109,35 @@ export async function findAccountWithFlowSession(userId: string): Promise<{ acco
 }
 
 /**
+ * Whether this user's pooled Google accounts can serve a Gemini call right now.
+ *
+ * Exists because "is Gemini configured?" has two answers and only one of them is in the
+ * environment. `GEMINI_API_KEY` is the local-dev fallback; the real credential in a deployment is
+ * the encrypted key on a connected account (see `resolveGenerationAccount` above and
+ * core/ai/provider-metadata.ts#SuppliedRequirements). Anything that decides whether a Gemini route
+ * is *available* has to ask this as well as the environment, or it rules the provider out on a
+ * variable that deployment deliberately never set — which is exactly what left the image route
+ * telling people to connect a Google account they had already connected.
+ *
+ * Three answers, because they need three different sentences:
+ *  - `usable`   — at least one active account holds a key, so a call would find one.
+ *  - `unusable` — accounts exist and hold keys, but every one is disabled or over quota. Waiting
+ *                 or reactivating fixes this; connecting another account is not the instruction.
+ *  - `none`     — nothing is connected. This is the only case where "connect an account" is true.
+ *
+ * The status filter deliberately matches `selectGoogleAccount`'s, so this never reports usable for
+ * a pool that would then throw `NoAvailableGoogleAccountError`.
+ */
+export async function describePooledGeminiCredential(userId: string): Promise<"usable" | "unusable" | "none"> {
+  await connectToDatabase();
+  const withKey = { userId, "credentials.apiKeyEnc": { $exists: true } };
+  const usable = await GoogleAccount.findOne({ ...withKey, status: "active" }).select("_id").lean();
+  if (usable) return "usable";
+  const anyAtAll = await GoogleAccount.findOne(withKey).select("_id").lean();
+  return anyAtAll ? "unusable" : "none";
+}
+
+/**
  * The single entry point every AI provider call should use to get a `GenerationAccountContext`.
  * Resolves the next usable pooled account and decrypts its API key — callers must still handle
  * `NoAvailableGoogleAccountError` (no active account with quota) and `ProviderQuotaExceededError`

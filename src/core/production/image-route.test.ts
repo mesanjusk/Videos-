@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     marked: new Map<string, string>(),
     flowSession: { value: null as { accountId: string } | null },
+    geminiCredential: { value: "none" as "usable" | "unusable" | "none" },
     geminiProvider: { id: "gemini" },
     ideogramProvider: { id: "ideogram" },
     resolveFlowImages: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("@/core/ai/registry", () => ({
 
 vi.mock("@/modules/accounts/service", () => ({
   findAccountWithFlowSession: vi.fn(async () => mocks.flowSession.value),
+  describePooledGeminiCredential: vi.fn(async () => mocks.geminiCredential.value),
 }));
 
 vi.mock("./flow-image-step", () => ({
@@ -61,6 +63,7 @@ const spentAllowance = () => new ProviderQuotaExceededError("gemini", 30, { mode
 beforeEach(() => {
   mocks.marked.clear();
   mocks.flowSession.value = null;
+  mocks.geminiCredential.value = "none";
   vi.clearAllMocks();
   process.env.GEMINI_API_KEY = "test-key";
   process.env.IDEOGRAM_API_KEY = "test-key";
@@ -152,6 +155,17 @@ describe("routeImages", () => {
     );
   });
 
+  it("tells a user with disabled accounts to reactivate one, not to connect one", async () => {
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.IDEOGRAM_API_KEY;
+    delete process.env.ENABLE_IDEOGRAM;
+    mocks.geminiCredential.value = "unusable";
+
+    await expect(routeImages(job, { ...request(vi.fn()), preferredProviderId: null })).rejects.toThrow(
+      /switched off or over the quota/,
+    );
+  });
+
   it("explains a dead end as a configuration problem, not an exhausted quota", async () => {
     const viaApi = vi.fn().mockRejectedValue(zeroAllowance());
 
@@ -178,6 +192,25 @@ describe("imageRouteCandidates", () => {
   it("drops providers that are not configured", async () => {
     delete process.env.IDEOGRAM_API_KEY;
     expect(await imageRouteCandidates("u1")).not.toContain("ideogram");
+  });
+
+  it("counts a connected Google account as Gemini's credential, not just the env key", async () => {
+    // Reported live as "No image provider is configured … connect a Google account" on a deployment
+    // that had connected one: GEMINI_API_KEY is the local-dev fallback, and the real credential is
+    // the encrypted key on a pooled account. The text gateway always knew that; this route did not.
+    delete process.env.GEMINI_API_KEY;
+    expect(await imageRouteCandidates("u1")).not.toContain("gemini");
+
+    mocks.geminiCredential.value = "usable";
+    expect(await imageRouteCandidates("u1")).toContain("gemini");
+  });
+
+  it("does not count an account pool that cannot currently serve", async () => {
+    // Disabled or over quota means selectGoogleAccount would throw, so offering Gemini here would
+    // only move the failure one step later.
+    delete process.env.GEMINI_API_KEY;
+    mocks.geminiCredential.value = "unusable";
+    expect(await imageRouteCandidates("u1")).not.toContain("gemini");
   });
 
   it("does not offer the browser route without a connected Flow session", async () => {

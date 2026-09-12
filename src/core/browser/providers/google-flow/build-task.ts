@@ -64,7 +64,9 @@ export function buildGoogleFlowVideoTask(input: BuildGoogleFlowTaskInput): Build
     {
       id: "await-prompt",
       action: "wait_for_state",
-      params: { states: ["PROMPT_READY", "WORKSPACE"] },
+      // `recordClips` snapshots the clips already on this page, at the moment the run is cleared to
+      // proceed and before anything has been generated. `await-clip` below is what spends it.
+      params: { states: ["PROMPT_READY", "WORKSPACE"], recordClips: true },
       timeoutMs: FLOW_TIMEOUTS_MS.interaction * 4,
     },
     // Everything after this addresses a page we have actually read.
@@ -92,7 +94,12 @@ export function buildGoogleFlowVideoTask(input: BuildGoogleFlowTaskInput): Build
     {
       id: "await-clip",
       action: "wait_for_state",
-      params: { state: "CLIP_READY", pollMs: 5000 },
+      // `requireNewClip` is the difference between "a clip is on screen" and "this run produced a
+      // clip". A Flow project that already holds one — a re-run, a resumed job, a second scene in
+      // the same workspace — is CLIP_READY the instant it loads, so without this the run could
+      // download a clip generated minutes ago and attach the wrong video to the scene. Nothing
+      // downstream can catch that: the file is valid and the duration is right.
+      params: { state: "CLIP_READY", pollMs: 5000, requireNewClip: true },
       timeoutMs: FLOW_TIMEOUTS_MS.render,
       retryable: false, // a render that never finishes shouldn't be retried from scratch — abort to manual instead
     },
