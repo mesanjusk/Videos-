@@ -28,6 +28,8 @@ vi.mock("@/core/ai/provider-health", () => ({
     mocks.marked.set(`${providerId}:${model ?? "*"}`, reason);
   }),
   isModelUnavailable: vi.fn(async (providerId: string, model?: string) => mocks.marked.has(`${providerId}:${model ?? "*"}`)),
+  unavailableReason: vi.fn(async (providerId: string, model?: string) => mocks.marked.get(`${providerId}:${model ?? "*"}`) ?? null),
+  UNAVAILABLE_TTL_SECONDS: 24 * 60 * 60,
 }));
 
 vi.mock("@/core/ai/registry", () => ({
@@ -220,5 +222,56 @@ describe("imageRouteCandidates", () => {
 
     mocks.flowSession.value = { accountId: "acc1" };
     expect(await imageRouteCandidates("u1")).toContain("flow-browser");
+  });
+});
+
+describe("a dead end that has already been recorded", () => {
+  it("records the refusal under the model it asked for, not only the one Google named", async () => {
+    // The live case: the request is for gemini-2.5-flash-image and the refusal comes back naming
+    // gemini-2.5-flash-preview-image, because that is what the free-tier quota is registered as.
+    // Recorded under the reported name alone, the note went into a key the router never reads and
+    // every later job spent another doomed request on the same refusal.
+    process.env.GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image";
+    delete process.env.ENABLE_IDEOGRAM;
+
+    await expect(routeImages(job, request(vi.fn().mockRejectedValue(zeroAllowance())))).rejects.toThrow(
+      /refused this request outright/,
+    );
+
+    expect([...mocks.marked.keys()]).toEqual(
+      expect.arrayContaining(["gemini:gemini-2.5-flash-image", "gemini:gemini-2.5-flash-preview-image"]),
+    );
+    // Which is the point of recording it: the next job does not repeat the call.
+    expect(await imageRouteCandidates("u1", "gemini")).not.toContain("gemini");
+  });
+
+  it("says the model was benched by a refusal, not that nothing was ever configured", async () => {
+    // "No image provider is configured" on a key that is present and correct sends an operator to
+    // check configuration that is fine.
+    delete process.env.ENABLE_IDEOGRAM;
+    mocks.marked.set("gemini:gemini-2.5-flash-preview-image", "limit: 0, model: gemini-2.5-flash-preview-image");
+
+    await expect(routeImages(job, { ...request(vi.fn()), preferredProviderId: null })).rejects.toThrow(
+      /refused outright the last time it was tried/,
+    );
+  });
+
+  it("names the free browser route when there is no Flow session to use it", async () => {
+    delete process.env.ENABLE_IDEOGRAM;
+
+    await expect(routeImages(job, request(vi.fn().mockRejectedValue(zeroAllowance())))).rejects.toThrow(
+      /Flow browser session on the Accounts page/,
+    );
+  });
+
+  it("does not suggest connecting a Flow session to someone who already has one", async () => {
+    delete process.env.ENABLE_IDEOGRAM;
+    mocks.flowSession.value = { accountId: "acc1" };
+    mocks.resolveFlowImages.mockRejectedValueOnce(new Error("boom"));
+
+    // gemini refuses structurally, then the browser route is tried and fails on its own terms.
+    await expect(
+      routeImages(job, request(vi.fn().mockRejectedValue(zeroAllowance()))),
+    ).rejects.toThrow(/boom/);
   });
 });
