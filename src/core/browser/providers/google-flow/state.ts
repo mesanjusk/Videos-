@@ -38,6 +38,11 @@ export type FlowScreen =
   | "ERROR"
   | "UNKNOWN";
 
+/** Whether the page still says work is in progress. Shared by CLIP_READY and GENERATING. */
+function isBusy(p: PageSignals): boolean {
+  return /generating|rendering|creating your|this may take/i.test(p.text) || p.hasProgressbar;
+}
+
 /** Ordered most-specific first — the first matching signal wins. */
 const SIGNALS: { screen: FlowScreen; test: (page: PageSignals) => boolean }[] = [
   // Checked before everything: a challenge can be overlaid on any screen, and mistaking one for a
@@ -55,10 +60,21 @@ const SIGNALS: { screen: FlowScreen; test: (page: PageSignals) => boolean }[] = 
     screen: "ERROR",
     test: (p) => /something went wrong|couldn.?t generate|generation failed|try again later/i.test(p.text),
   },
-  // A visible video with a download control is the finish line, and it has to be tested before
-  // GENERATING: Flow keeps the "generating" label on screen for a moment after the clip appears.
-  { screen: "CLIP_READY", test: (p) => p.hasVideo && p.hasDownloadControl },
-  { screen: "GENERATING", test: (p) => /generating|rendering|creating your|this may take/i.test(p.text) || p.hasProgressbar },
+  // A finished clip, and it has to be tested before GENERATING: Flow keeps the "generating" label
+  // on screen for a moment after the video appears.
+  //
+  // The download control used to be required here, and that was too strict to be reachable. Flow
+  // puts Download behind a hover affordance or an overflow menu, so a clip that is finished and
+  // playing can have no visible download button at all — the run then waited out its full
+  // five-minute render timeout on a state that had already arrived and fell back to the manual
+  // hand-off with the clip sitting right there on screen.
+  //
+  // So a download control is now sufficient, not necessary: a video with nothing on the page still
+  // claiming to be working is just as much a finished render. `isBusy` is what keeps that honest —
+  // while the label or a progress bar is up, this stays GENERATING and keeps polling, which is the
+  // one case where waiting is the right answer.
+  { screen: "CLIP_READY", test: (p) => p.hasVideo && (p.hasDownloadControl || !isBusy(p)) },
+  { screen: "GENERATING", test: isBusy },
   { screen: "PROMPT_READY", test: (p) => p.hasPromptInput },
   { screen: "WORKSPACE", test: (p) => p.hasTimeline || /new project|your projects/i.test(p.text) },
   { screen: "LANDING", test: (p) => /flow|veo/i.test(p.title) },
@@ -69,7 +85,9 @@ interface PageSignals {
   title: string;
   text: string;
   hasPromptInput: boolean;
+  /** A visible `<video>` with a source actually loaded — not an empty player. */
   hasVideo: boolean;
+  /** A *visible* download/export/save control. Sufficient for CLIP_READY, never required. */
   hasDownloadControl: boolean;
   hasProgressbar: boolean;
   hasTimeline: boolean;
@@ -87,17 +105,32 @@ async function readSignals(page: Page): Promise<PageSignals> {
           return r.width > 0 && r.height > 0;
         };
         const anyVisible = (selector: string) => Array.from(document.querySelectorAll(selector)).some(visible);
+        // `title` is in here because Flow's media controls are icon-only buttons: a download that
+        // carries its meaning in a tooltip rather than in text is still a download control, and
+        // reading only aria-label and text missed every one of them.
         const named = (pattern: RegExp) =>
           Array.from(document.querySelectorAll('button, a[href], [role="button"], [role="menuitem"]')).some(
             (el) =>
               visible(el) &&
-              pattern.test(`${el.getAttribute("aria-label") ?? ""} ${el.textContent ?? ""}`.replace(/\s+/g, " ")),
+              pattern.test(
+                `${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("title") ?? ""} ${el.textContent ?? ""}`.replace(
+                  /\s+/g,
+                  " ",
+                ),
+              ),
           );
+
+        // A <video> with nothing loaded in it is a placeholder, not a result — and now that a
+        // download control is no longer required for CLIP_READY, that distinction is what stops an
+        // empty player from being read as a finished clip.
+        const hasLoadedVideo = Array.from(document.querySelectorAll("video")).some(
+          (el) => visible(el) && Boolean(el.currentSrc || el.getAttribute("src") || el.querySelector("source[src]")),
+        );
 
         return {
           text: (document.body?.innerText ?? "").slice(0, 6000),
           hasPromptInput: anyVisible('textarea, [contenteditable="true"][role="textbox"], input[type="text"]'),
-          hasVideo: anyVisible("video"),
+          hasVideo: hasLoadedVideo,
           hasDownloadControl: named(/download|export|save/i),
           hasProgressbar: anyVisible('[role="progressbar"], progress'),
           hasTimeline: anyVisible('[data-testid="timeline"], [aria-label*="timeline" i]'),

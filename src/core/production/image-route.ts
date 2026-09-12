@@ -3,10 +3,10 @@ import type { JobDoc } from "@/modules/jobs/models/Job";
 import type { GeneratedImage, ImageProvider } from "@/core/ai/types";
 import { ProviderQuotaExceededError } from "@/core/ai/types";
 import { getImageProvider, BROWSER_IMAGE_PROVIDER_ID } from "@/core/ai/registry";
-import { PROVIDER_METADATA, isProviderConfigured } from "@/core/ai/provider-metadata";
+import { PROVIDER_METADATA, isProviderConfigured, GEMINI_REQUIREMENT } from "@/core/ai/provider-metadata";
 import { markModelUnavailable, isModelUnavailable } from "@/core/ai/provider-health";
 import { resolveFlowImages, FlowMissionPendingError, type FlowImageRequest, type FlowImageOptions } from "./flow-image-step";
-import { findAccountWithFlowSession } from "@/modules/accounts/service";
+import { findAccountWithFlowSession, describePooledGeminiCredential } from "@/modules/accounts/service";
 
 /**
  * Which route draws an image, and what happens when it cannot.
@@ -58,6 +58,34 @@ async function browserRouteUsable(userId: string): Promise<boolean> {
   return account !== null;
 }
 
+/** Never throws — an unreadable account pool reports "none", which sends the reader to the env var. */
+async function geminiCredentialState(userId: string): Promise<"usable" | "unusable" | "none"> {
+  return describePooledGeminiCredential(userId).catch(() => "none" as const);
+}
+
+/**
+ * Why there is no route at all, phrased as the thing to change.
+ *
+ * Two quite different situations produced one message before: nothing configured, and a pool whose
+ * accounts are all disabled or over quota. The second was told to "connect a Google account",
+ * which is both untrue and unhelpful — the accounts are there, they are just not usable right now.
+ */
+async function explainNoImageRoute(userId: string): Promise<string> {
+  if ((await geminiCredentialState(userId)) === "unusable") {
+    return (
+      "No image provider can serve this right now: every connected Google account is switched off or over the " +
+      "quota recorded for it, and no other image route is configured. Reactivate an account in Account Manager, " +
+      "wait for its quota to reset, or configure another route — ENABLE_IDEOGRAM (IDEOGRAM_API_KEY), " +
+      "ENABLE_LOCAL_AI (LOCAL_AI_IMAGE_URL), or connect a Flow browser session for the Google Flow route."
+    );
+  }
+  return (
+    "No image provider is configured. Connect a Google account in Account Manager (or set GEMINI_API_KEY), " +
+    "or enable one of ENABLE_LOCAL_AI (LOCAL_AI_IMAGE_URL), ENABLE_IDEOGRAM (IDEOGRAM_API_KEY), or connect a " +
+    "Flow browser session for the Google Flow browser route."
+  );
+}
+
 /** The image model a provider would use, for the health record — Gemini's is the one that varies. */
 function modelFor(providerId: string): string | undefined {
   return providerId === "gemini" ? (process.env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image") : undefined;
@@ -70,7 +98,15 @@ function modelFor(providerId: string): string | undefined {
  * providers are dropped here rather than discovered mid-run — a missing key is knowable up front.
  */
 export async function imageRouteCandidates(userId: string, preferredProviderId?: string | null): Promise<string[]> {
-  const registered = PROVIDER_METADATA.filter((d) => d.capability === "image" && isProviderConfigured(d)).map((d) => d.id);
+  // A pooled Google account stands in for GEMINI_API_KEY, which is the local-dev fallback and not
+  // how a real deployment holds this credential. Without this, a studio whose Gemini key lives on
+  // a connected account had *no* image candidates at all and was told to connect a Google
+  // account — the one thing it had already done. The text gateway has always passed this
+  // (core/ai/gateway/text.ts); the image route never did.
+  const supplied = (await geminiCredentialState(userId)) === "usable" ? [GEMINI_REQUIREMENT] : [];
+  const registered = PROVIDER_METADATA.filter((d) => d.capability === "image" && isProviderConfigured(d, supplied)).map(
+    (d) => d.id,
+  );
 
   // With nothing explicitly chosen, the browser route goes first.
   //
@@ -109,10 +145,7 @@ export async function routeImages(
 ): Promise<Record<string, GeneratedImage>> {
   const candidates = await imageRouteCandidates(jobDoc.userId, request.preferredProviderId);
   if (candidates.length === 0) {
-    throw new Error(
-      "No image provider is configured. Set GEMINI_API_KEY, connect a Google account, or enable one of " +
-        "ENABLE_LOCAL_AI (LOCAL_AI_IMAGE_URL), ENABLE_IDEOGRAM (IDEOGRAM_API_KEY), or the Google Flow browser route.",
-    );
+    throw new Error(await explainNoImageRoute(jobDoc.userId));
   }
 
   const refused: string[] = [];

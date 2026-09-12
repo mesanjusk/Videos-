@@ -43,8 +43,17 @@ describe("classifyFromSignals", () => {
     ).toBe("CLIP_READY");
   });
 
-  it("does not call a video ready when there is no way to download it", () => {
+  it("keeps waiting while the page still says it is working, download control or not", () => {
     expect(classifyFromSignals(signals({ hasVideo: true, text: "Generating" }))).toBe("GENERATING");
+    expect(classifyFromSignals(signals({ hasVideo: true, hasProgressbar: true }))).toBe("GENERATING");
+  });
+
+  it("calls a finished clip ready even when Download is hidden behind a menu", () => {
+    // Requiring a *visible* download control made CLIP_READY unreachable on a Flow that puts
+    // Download behind a hover affordance or an overflow menu: the clip was playing on screen while
+    // the run waited out its five-minute render timeout and fell back to the manual hand-off.
+    // Nothing claiming to be in progress plus a loaded video is a finished render.
+    expect(classifyFromSignals(signals({ hasVideo: true }))).toBe("CLIP_READY");
   });
 
   it("reads a progress bar as still working", () => {
