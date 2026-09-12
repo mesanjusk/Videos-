@@ -85,6 +85,14 @@ interface PageSignals {
   title: string;
   text: string;
   hasPromptInput: boolean;
+  /**
+   * The source of every visible, loaded `<video>` — each clip's identity on this page.
+   *
+   * Not used for classification (that is `hasVideo`): a screen is CLIP_READY whether the clip is
+   * new or was already there. Telling those apart is the *caller's* question, asked through
+   * `freshClipIds` once it knows what was on the page before it pressed Generate.
+   */
+  clipIds: string[];
   /** A visible `<video>` with a source actually loaded — not an empty player. */
   hasVideo: boolean;
   /** A *visible* download/export/save control. Sufficient for CLIP_READY, never required. */
@@ -120,17 +128,22 @@ async function readSignals(page: Page): Promise<PageSignals> {
               ),
           );
 
-        // A <video> with nothing loaded in it is a placeholder, not a result — and now that a
-        // download control is no longer required for CLIP_READY, that distinction is what stops an
-        // empty player from being read as a finished clip.
-        const hasLoadedVideo = Array.from(document.querySelectorAll("video")).some(
-          (el) => visible(el) && Boolean(el.currentSrc || el.getAttribute("src") || el.querySelector("source[src]")),
-        );
+        // Which clips are on the page, by source.
+        //
+        // A <video> with nothing loaded in it is a placeholder, not a result — that distinction is
+        // what stops an empty player from being read as a finished clip now that a download control
+        // is no longer required for CLIP_READY. The source doubles as the clip's identity, which is
+        // what lets a run tell the clip it just generated from one that was already there.
+        const clipIds = Array.from(document.querySelectorAll("video"))
+          .filter(visible)
+          .map((el) => el.currentSrc || el.getAttribute("src") || el.querySelector("source[src]")?.getAttribute("src") || "")
+          .filter((id) => id.length > 0);
 
         return {
           text: (document.body?.innerText ?? "").slice(0, 6000),
           hasPromptInput: anyVisible('textarea, [contenteditable="true"][role="textbox"], input[type="text"]'),
-          hasVideo: hasLoadedVideo,
+          clipIds: Array.from(new Set(clipIds)),
+          hasVideo: clipIds.length > 0,
           hasDownloadControl: named(/download|export|save/i),
           hasProgressbar: anyVisible('[role="progressbar"], progress'),
           hasTimeline: anyVisible('[data-testid="timeline"], [aria-label*="timeline" i]'),
@@ -146,6 +159,7 @@ async function readSignals(page: Page): Promise<PageSignals> {
     title,
     text: dom?.text ?? "",
     hasPromptInput: dom?.hasPromptInput ?? false,
+    clipIds: dom?.clipIds ?? [],
     hasVideo: dom?.hasVideo ?? false,
     hasDownloadControl: dom?.hasDownloadControl ?? false,
     hasProgressbar: dom?.hasProgressbar ?? false,
@@ -154,11 +168,48 @@ async function readSignals(page: Page): Promise<PageSignals> {
   };
 }
 
+/**
+ * One reading of the page: the screen, and which clips were on it.
+ *
+ * The clip list is here rather than in a second read because both come from the same DOM pass —
+ * asking twice would let the page change between "there is a clip" and "which clip is it", which is
+ * precisely the race this exists to close.
+ */
+export interface FlowReading {
+  screen: FlowScreen;
+  /** Source of every visible, loaded clip at the moment of the reading. */
+  clipIds: string[];
+}
+
+/** Reads the page once. Never throws — an unreadable page is `UNKNOWN` with no clips. */
+export async function readFlowScreen(page: Page): Promise<FlowReading> {
+  const signals = await readSignals(page).catch(() => null);
+  if (!signals) return { screen: "UNKNOWN", clipIds: [] };
+  return { screen: classifyFromSignals(signals), clipIds: signals.clipIds };
+}
+
 /** Reads the page once and names the screen. Never throws — an unreadable page is `UNKNOWN`. */
 export async function classifyFlowScreen(page: Page): Promise<FlowScreen> {
-  const signals = await readSignals(page).catch(() => null);
-  if (!signals) return "UNKNOWN";
-  return classifyFromSignals(signals);
+  return (await readFlowScreen(page)).screen;
+}
+
+/**
+ * Clips on the page now that were not there when the baseline was taken.
+ *
+ * This is what "a clip is ready" has to mean after pressing Generate. A Flow project that already
+ * holds clips — a re-run, a resumed job, a second scene in the same workspace — shows a finished
+ * video and a working download button the instant the page loads, so a run that waits only for
+ * CLIP_READY can be satisfied by a clip generated minutes ago and download *that*, quietly
+ * attaching the wrong video to the scene. Nothing downstream could catch it: the file is valid,
+ * the duration is right, and the only way to notice is to watch the clip.
+ *
+ * An absent baseline (`undefined`) means nobody recorded one — a run resumed in a fresh process,
+ * or an older task definition without the step param. Everything counts as fresh then, which is
+ * the previous behaviour: worse, but not worse than refusing to finish a run at all.
+ */
+export function freshClipIds(current: readonly string[], baseline: ReadonlySet<string> | undefined): string[] {
+  if (!baseline) return [...current];
+  return current.filter((id) => !baseline.has(id));
 }
 
 /** The pure decision, exported so the signal precedence is testable without a browser. */

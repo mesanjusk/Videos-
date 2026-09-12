@@ -42,6 +42,20 @@ describe("buildGoogleFlowVideoTask", () => {
     expect(wait?.retryable).toBe(false);
   });
 
+  it("waits for a clip this run produced, not whatever clip the project already held", () => {
+    // A re-run, a resumed job or a second scene in the same workspace opens on a finished clip with
+    // a working download button. Without a baseline taken before Generate, the run downloads that
+    // one — a valid file of the wrong video, which nothing downstream can detect.
+    const { steps } = buildGoogleFlowVideoTask({ promptText: PROMPT });
+    const baseline = steps.find((s) => s.id === "await-prompt");
+    const wait = steps.find((s) => s.id === "await-clip");
+
+    expect(baseline?.params.recordClips).toBe(true);
+    expect(wait?.params.requireNewClip).toBe(true);
+    // The baseline is only a baseline if it is taken before the prompt and the Generate click.
+    expect(steps.indexOf(baseline!)).toBeLessThan(steps.findIndex((s) => s.id === "generate"));
+  });
+
   it("always ends by downloading the file", () => {
     const { steps } = buildGoogleFlowVideoTask({ promptText: PROMPT });
     expect(steps.at(-1)?.action).toBe("download_file");

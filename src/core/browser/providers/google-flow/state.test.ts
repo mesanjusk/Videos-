@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyFromSignals, TERMINAL_SCREENS, type PageSignals } from "./state";
+import { classifyFromSignals, freshClipIds, TERMINAL_SCREENS, type PageSignals } from "./state";
 
 function signals(overrides: Partial<PageSignals> = {}): PageSignals {
   return {
@@ -7,6 +7,7 @@ function signals(overrides: Partial<PageSignals> = {}): PageSignals {
     title: "Flow",
     text: "",
     hasPromptInput: false,
+    clipIds: [],
     hasVideo: false,
     hasDownloadControl: false,
     hasProgressbar: false,
@@ -77,5 +78,29 @@ describe("classifyFromSignals", () => {
     // failure.
     expect(Object.keys(TERMINAL_SCREENS)).toEqual(expect.arrayContaining(["SIGNED_OUT", "CHALLENGE"]));
     expect(Object.keys(TERMINAL_SCREENS)).not.toContain("GENERATING");
+  });
+});
+
+describe("freshClipIds", () => {
+  it("names only the clips that were not there before", () => {
+    // The point of the whole mechanism: a project that already holds a clip shows a finished video
+    // and a working download button the moment it loads, and downloading that one attaches the
+    // wrong video to the scene with nothing downstream able to notice.
+    expect(freshClipIds(["blob:old", "blob:new"], new Set(["blob:old"]))).toEqual(["blob:new"]);
+  });
+
+  it("returns nothing when the page still holds only the clip it started with", () => {
+    expect(freshClipIds(["blob:old"], new Set(["blob:old"]))).toEqual([]);
+  });
+
+  it("counts a re-sourced player as a new clip", () => {
+    // Flow may reuse the same <video> element and swap its src. Same element, different clip.
+    expect(freshClipIds(["blob:second"], new Set(["blob:first"]))).toEqual(["blob:second"]);
+  });
+
+  it("treats everything as fresh when no baseline was recorded", () => {
+    // A run resumed in another process, or an older stored task definition. Degrades to the old
+    // behaviour rather than refusing to ever finish.
+    expect(freshClipIds(["blob:whatever"], undefined)).toEqual(["blob:whatever"]);
   });
 });

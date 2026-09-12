@@ -8,7 +8,7 @@ import type { BrowserTask, TaskStep } from "@/core/browser/types";
 import type { RecoveryAction, RecoveryContext } from "@/core/browser/recovery-engine";
 import { FLOW_TIMEOUTS_MS } from "./selectors";
 import { probePage } from "@/core/browser/page-probe";
-import { classifyFlowScreen, TERMINAL_SCREENS, type FlowScreen } from "./state";
+import { classifyFlowScreen, readFlowScreen, freshClipIds, TERMINAL_SCREENS, type FlowScreen } from "./state";
 
 interface FlowTaskMetadata {
   promptText: string;
@@ -18,6 +18,12 @@ interface FlowTaskMetadata {
 interface RunContext {
   promptText: string;
   referenceImagePaths: string[];
+  /**
+   * The clips that were already on the page before this run generated anything, recorded by a
+   * `wait_for_state` step carrying `recordClips` (see build-task.ts). `undefined` means no step
+   * asked for one — see `freshClipIds` on what that implies.
+   */
+  baselineClipIds?: Set<string>;
 }
 
 async function downloadReferenceImages(urls: string[], dir: string): Promise<string[]> {
@@ -178,8 +184,12 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
         const probe = await probePage(page, typeof params.limit === "number" ? params.limit : undefined);
         return { probe: probe as unknown as Record<string, unknown> };
       }
-      case "wait_for_state":
-        return { screen: await this.waitForScreen(page, step) };
+      case "wait_for_state": {
+        const { screen, newClipIds } = await this.waitForScreen(page, step);
+        // The clip id goes into the step's output, so a run that downloaded the wrong video can be
+        // told apart afterwards from one that downloaded nothing.
+        return { screen, ...(newClipIds.length > 0 ? { newClipIds } : {}) };
+      }
       default:
         throw new Error(`Unsupported action for google-flow: ${step.action}`);
     }
@@ -198,28 +208,57 @@ export class GoogleFlowProviderAdapter implements ProviderAdapter {
    * human-verification challenge, Flow's own error state — which fails *immediately* with the
    * reason instead of burning the full timeout, and the timeout itself, which reports the screen it
    * was actually looking at when it gave up rather than the name of a selector.
+   *
+   * `requireNewClip` adds a fourth: the wanted screen, showing a clip that was already there. That
+   * reads as arrival and is not one, so it keeps polling and, if the deadline passes, says exactly
+   * that rather than blaming the screen it was looking at.
    */
-  private async waitForScreen(page: Page, step: TaskStep): Promise<FlowScreen> {
+  private async waitForScreen(page: Page, step: TaskStep): Promise<{ screen: FlowScreen; newClipIds: string[] }> {
     const wanted = (Array.isArray(step.params.states) ? step.params.states : [step.params.state])
       .filter((s): s is string => typeof s === "string" && s.length > 0)
       .map((s) => s as FlowScreen);
     if (wanted.length === 0) throw new Error(`Step ${step.id} (wait_for_state) needs "state" or "states" in params`);
 
+    const ctx = this.contexts.get(page);
+    // `requireNewClip` is what makes "a clip is ready" mean *this run's* clip. See freshClipIds.
+    const requireNewClip = step.params.requireNewClip === true;
     const timeoutMs = step.timeoutMs ?? FLOW_TIMEOUTS_MS.render;
     const pollMs = typeof step.params.pollMs === "number" ? step.params.pollMs : 2000;
     const deadline = Date.now() + timeoutMs;
     let screen: FlowScreen = "UNKNOWN";
+    let sawWantedWithoutNewClip = false;
 
     while (Date.now() < deadline) {
-      screen = await classifyFlowScreen(page);
-      if (wanted.includes(screen)) return screen;
+      const reading = await readFlowScreen(page);
+      screen = reading.screen;
 
-      const blocked = TERMINAL_SCREENS[screen];
-      // Only when the step wasn't itself waiting for that screen — a run may legitimately wait for
-      // SIGNED_OUT to confirm a sign-out happened.
-      if (blocked) throw new Error(blocked);
+      if (wanted.includes(screen)) {
+        const fresh = requireNewClip ? freshClipIds(reading.clipIds, ctx?.baselineClipIds) : [];
+        if (!requireNewClip || fresh.length > 0) {
+          // Recorded at the moment the run is cleared to proceed, so the baseline is the page as it
+          // actually was immediately before the prompt and the Generate click.
+          if (step.params.recordClips === true && ctx) ctx.baselineClipIds = new Set(reading.clipIds);
+          return { screen, newClipIds: fresh };
+        }
+        // The wanted screen, but every clip on it was already there before this run started. That
+        // is not arrival, it is the old clip — keep waiting.
+        sawWantedWithoutNewClip = true;
+      } else {
+        const blocked = TERMINAL_SCREENS[screen];
+        // Only when the step wasn't itself waiting for that screen — a run may legitimately wait
+        // for SIGNED_OUT to confirm a sign-out happened.
+        if (blocked) throw new Error(blocked);
+      }
 
       await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    if (sawWantedWithoutNewClip) {
+      throw new Error(
+        `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for Google Flow to produce a new clip. ` +
+          `The page reached ${wanted.join(" or ")}, but the only clip on it was already there before this run ` +
+          "started — so this render either never finished or never began.",
+      );
     }
 
     throw new Error(
