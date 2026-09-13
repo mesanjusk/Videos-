@@ -181,7 +181,24 @@ export interface VideoGenerationInput {
 }
 
 export type VideoGenerationResult =
-  | { status: "completed"; data: Buffer | string; mimeType: string; durationSeconds: number }
+  | {
+      status: "completed";
+      data: Buffer | string;
+      mimeType: string;
+      durationSeconds: number;
+      /**
+       * The clip already contains its own audio — dialogue, effects, ambience.
+       *
+       * Google Flow generates video with sound, which makes a separately synthesised voice track
+       * and a lip-sync pass redundant for that clip: the performance is already in it, and laying a
+       * second reading of the same line over the top is worse than either alone.
+       *
+       * Only a provider that *knows* sets this. A clip uploaded by hand may or may not have audio,
+       * and guessing "yes" would silently drop the narration from a silent one — so absent means
+       * absent, and the pipeline keeps making a voice track as it always did.
+       */
+      hasEmbeddedAudio?: boolean;
+    }
   | {
       /** No public API exists for this provider (e.g. Google Flow) — a human must run the prompt manually. */
       status: "manual_pending";

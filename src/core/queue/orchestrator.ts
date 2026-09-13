@@ -45,7 +45,10 @@ export async function advanceScene(userId: string, projectId: string, sceneId: s
   const scene = await Scene.findOne({ _id: sceneId, userId, projectId });
   if (!scene || IN_FLIGHT_STATUSES.has(scene.status ?? "")) return;
 
-  const hasDialogue = !!scene.dialogue?.trim();
+  // A scene with spoken lines needs a voice track — unless its clip already speaks them. Google
+  // Flow generates sound with the picture, so for those scenes the voice and lip-sync steps would
+  // synthesise a second reading of a line the clip has already delivered.
+  const needsSpokenAudio = !!scene.dialogue?.trim() && !scene.videoHasAudio;
 
   if (!scene.imageAssetId && scene.characterIds.length > 0 && scene.backgroundId) {
     scene.status = "image_queued"; // matches POST /api/scenes/:id/image so the Scene Manager's spinner shows up
@@ -57,11 +60,11 @@ export async function advanceScene(userId: string, projectId: string, sceneId: s
     await enqueueJob({ userId, projectId, sceneId, type: "scene_video", payload: {} });
     return;
   }
-  if (scene.videoAssetId && hasDialogue && !scene.voiceAssetId) {
+  if (scene.videoAssetId && needsSpokenAudio && !scene.voiceAssetId) {
     await enqueueJob({ userId, projectId, sceneId, type: "voice", payload: {} });
     return;
   }
-  if (scene.videoAssetId && scene.voiceAssetId && hasDialogue && !scene.lipSyncAssetId) {
+  if (scene.videoAssetId && scene.voiceAssetId && needsSpokenAudio && !scene.lipSyncAssetId) {
     if (await canLipSyncAutomatically(userId)) {
       await enqueueJob({ userId, projectId, sceneId, type: "lipsync", payload: {} });
       return;
@@ -147,6 +150,8 @@ export interface SceneAssetState {
   hasVoice: boolean;
   hasLipSync: boolean;
   hasDialogue: boolean;
+  /** The clip speaks for itself — see Scene#videoHasAudio. */
+  videoHasAudio?: boolean;
 }
 
 /**
@@ -164,6 +169,9 @@ export interface SceneAssetState {
 export function isSceneRenderReady(scene: SceneAssetState, lipSyncIsAutomatic: boolean): boolean {
   if (!scene.hasVideo) return false;
   if (!scene.hasDialogue) return true;
+  // A clip that carries its own audio is finished the moment it exists: there is no voice track
+  // coming, because none was ever needed, and waiting for one would hold the render forever.
+  if (scene.videoHasAudio) return true;
   return lipSyncIsAutomatic ? scene.hasLipSync : scene.hasVoice;
 }
 
@@ -171,7 +179,7 @@ async function maybeEnqueueRender(userId: string, projectId: string): Promise<vo
   const project = await Project.findOne({ _id: projectId, userId }).select("finalVideoAssetId");
   if (!project || project.finalVideoAssetId) return; // full mode renders once automatically, not on every edit
 
-  const scenes = await Scene.find({ userId, projectId }).select("dialogue videoAssetId voiceAssetId lipSyncAssetId");
+  const scenes = await Scene.find({ userId, projectId }).select("dialogue videoAssetId videoHasAudio voiceAssetId lipSyncAssetId");
   if (scenes.length === 0) return;
 
   const lipSyncIsAutomatic = await canLipSyncAutomatically(userId);
@@ -182,6 +190,7 @@ async function maybeEnqueueRender(userId: string, projectId: string): Promise<vo
         hasVoice: !!s.voiceAssetId,
         hasLipSync: !!s.lipSyncAssetId,
         hasDialogue: !!s.dialogue?.trim(),
+        videoHasAudio: !!s.videoHasAudio,
       },
       lipSyncIsAutomatic,
     ),

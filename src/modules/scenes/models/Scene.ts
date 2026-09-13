@@ -28,6 +28,11 @@ const sceneSchema = new Schema(
     backgroundId: { type: Schema.Types.ObjectId, ref: "Background" },
     imageAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     videoAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
+    // Whether that clip carries its own soundtrack — true for anything Google Flow generated, which
+    // produces sound with the picture. A scene whose clip already speaks needs no synthesised voice
+    // track and no lip-sync pass, and the render must use the clip's own audio rather than laying a
+    // second reading of the same line over it. Set by the provider that made the clip, never guessed.
+    videoHasAudio: { type: Boolean, default: false },
     voiceAssetId: { type: Schema.Types.ObjectId, ref: "Asset" },
     // The lip-synced clip (PDF Step 7) — a new asset separate from videoAssetId, since the source
     // clip + voice track are kept too (re-running lip sync doesn't require regenerating either).

@@ -61,6 +61,7 @@ export async function completeSceneVideo(
   });
 
   scene.set("videoAssetId", asset._id);
+  scene.set("videoHasAudio", result.hasEmbeddedAudio === true);
   scene.set("videoStale", false);
   scene.status = "video_ready";
   await scene.save();
