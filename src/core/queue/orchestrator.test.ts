@@ -32,3 +32,25 @@ describe("isSceneRenderReady", () => {
     expect(isSceneRenderReady(scene({ hasVoice: false, hasLipSync: false }), false)).toBe(false);
   });
 });
+
+describe("a clip that speaks for itself", () => {
+  // Google Flow generates sound along with the picture. For those scenes the voice step would
+  // synthesise a second reading of a line the clip has already delivered, and the lip-sync step
+  // would try to match a mouth to the wrong one of the two.
+  it("is ready on its clip alone, with no voice track and none coming", () => {
+    expect(isSceneRenderReady(scene({ hasVoice: false, videoHasAudio: true }), false)).toBe(true);
+  });
+
+  it("does not wait for a lip-sync pass even where one is available", () => {
+    // Waiting would hold the render forever: nothing enqueues voice or lip-sync for this scene, so
+    // the asset it is waiting for is never going to arrive.
+    expect(isSceneRenderReady(scene({ hasVoice: false, hasLipSync: false, videoHasAudio: true }), true)).toBe(true);
+  });
+
+  it("changes nothing for a clip that does not carry audio", () => {
+    // The flag is set by the provider that made the clip, never guessed — a hand-uploaded video
+    // may or may not have sound, so absent means the pipeline behaves exactly as it always did.
+    expect(isSceneRenderReady(scene({ hasVoice: false, videoHasAudio: false }), false)).toBe(false);
+    expect(isSceneRenderReady(scene({ hasVoice: false }), false)).toBe(false);
+  });
+});

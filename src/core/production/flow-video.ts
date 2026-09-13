@@ -19,6 +19,8 @@ export interface GeneratedVideo {
   data: Buffer;
   mimeType: string;
   durationSeconds: number;
+  /** Flow's clips come with sound. See VideoGenerationResult#hasEmbeddedAudio. */
+  hasEmbeddedAudio: true;
 }
 
 /** Flow's clips are 5-8 seconds; the pipeline's own clamp says the same. */
@@ -53,5 +55,7 @@ export async function videoFromMission(mission: CompletedMission): Promise<Gener
     // Measured downstream: `completeSceneVideo` prefers the storage backend's own reading of the
     // file over any claim made here, and checks it against the production profile's target.
     durationSeconds: ASSUMED_DURATION_SECONDS,
+    // Flow generates sound along with the picture, so this scene needs no voice track of its own.
+    hasEmbeddedAudio: true,
   };
 }

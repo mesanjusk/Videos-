@@ -71,6 +71,9 @@ export async function generateVideoViaFlowAutomation(
       data: await readFile(downloaded.path),
       mimeType: "video/mp4",
       durationSeconds,
+      // Same product, same property: a Flow clip arrives with its own audio, whichever runner
+      // fetched it. See VideoGenerationResult#hasEmbeddedAudio.
+      hasEmbeddedAudio: true,
     };
   }
 
