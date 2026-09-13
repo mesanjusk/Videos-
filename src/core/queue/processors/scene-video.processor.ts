@@ -1,5 +1,6 @@
 import type { Job as BullJob } from "bullmq";
 import type { HydratedDocument } from "mongoose";
+import type { JobDoc } from "@/modules/jobs/models/Job";
 import { withJobLifecycle, type BullJobData, type ProcessorResult } from "./helpers";
 import { Project } from "@/modules/projects/models/Project";
 import { Scene, type SceneDoc } from "@/modules/scenes/models/Scene";
@@ -16,6 +17,8 @@ import { QualityCheckFailedError } from "@/core/quality/errors";
 import { resolveQualityTargets } from "@/core/production-engine/resolve-quality-targets";
 import { getFeatureFlags } from "@/core/config/flags";
 import { isWorkerRunning } from "@/core/queue/worker-presence";
+import { isExtensionConnected } from "@/core/browser/extension-presence";
+import { resolveFlowVideo } from "@/core/production/flow-image-step";
 import { findAccountWithFlowSession } from "@/modules/accounts/service";
 import { enqueueJob } from "@/modules/jobs/service";
 import { ProductionProfile } from "@/modules/production-profiles/models/ProductionProfile";
@@ -129,6 +132,21 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
     });
 
     if (result.status === "manual_pending") {
+      // Before anything else: can the operator's own browser make this clip?
+      //
+      // The Playwright route below needs a worker with Chromium on it. The extension needs neither
+      // — it runs where the person already is, already signed into Flow, and the server only
+      // handles the finished file. On a small host that is not merely cheaper, it is the difference
+      // between video generation existing and not: a browser and a video encoder do not fit
+      // alongside everything else a modest instance is already serving.
+      //
+      // Parks the job rather than blocking, exactly as the image steps do; the extension's
+      // completion report wakes it (core/production/flow-image-wake.ts).
+      const viaExtension = await tryExtensionVideo(jobDoc, result.promptText, characterReferenceImages);
+      if (viaExtension) {
+        return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId!.toString(), viaExtension, project.activeProfileId);
+      }
+
       // Browser fallback: before parking this on a human, see whether the same provider can be
       // driven through its own website instead. This is the point of having a browser automation
       // subsystem in a video studio at all — a provider with no API is not the same thing as a
@@ -156,6 +174,34 @@ export async function processSceneVideoJob(bullJob: BullJob<BullJobData>): Promi
 
     return completeSceneVideo(scene, jobDoc.userId, jobDoc.projectId!.toString(), result, project.activeProfileId);
   });
+}
+
+/**
+ * The clip, drawn in the operator's own browser — or null when nothing is there to draw it.
+ *
+ * Never throws for "no extension": that is the ordinary case on a deployment that has not set one
+ * up, and it must leave the scene exactly where it would have been, free to try the worker route
+ * or the manual hand-off below. `FlowMissionPendingError` is the deliberate exception — it is not a
+ * failure but a park, and it has to reach the job lifecycle untouched or the job would be retried
+ * and start a second set of missions for a clip already being rendered.
+ */
+async function tryExtensionVideo(
+  jobDoc: HydratedDocument<JobDoc>,
+  promptText: string,
+  characterReferenceImages: { url: string; description: string }[],
+): Promise<Extract<VideoGenerationResult, { status: "completed" }> | null> {
+  if (!getFeatureFlags().browserFallback) return null;
+  if (!(await isExtensionConnected().catch(() => false))) return null;
+
+  return resolveFlowVideo(
+    jobDoc,
+    { key: "video", prompt: promptText, referenceUrls: characterReferenceImages.map((r) => r.url) },
+    {
+      projectId: jobDoc.projectId?.toString(),
+      aspectRatio: "9:16",
+      imageTarget: { kind: "scene-video", sceneId: jobDoc.sceneId?.toString() },
+    },
+  );
 }
 
 /**
