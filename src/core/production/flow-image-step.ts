@@ -1,10 +1,13 @@
 import type { HydratedDocument } from "mongoose";
 import type { JobDoc } from "@/modules/jobs/models/Job";
 import type { GeneratedImage } from "@/core/ai/types";
+import type { BrowserTask } from "@/core/browser/types";
 import { buildGoogleFlowImageMission } from "@/core/browser/providers/google-flow/build-image-mission";
+import { buildGoogleFlowVideoMission } from "@/core/browser/providers/google-flow/build-video-mission";
 import { enqueueExtensionBrowserTask } from "@/modules/browser-automation/extension-service";
 import { BrowserTaskRun } from "@/modules/browser-automation/models/BrowserTaskRun";
-import { imageFromMission } from "./flow-image";
+import { imageFromMission, type MissionDownload } from "./flow-image";
+import { videoFromMission, type GeneratedVideo } from "./flow-video";
 
 /**
  * Generating images through Google Flow, from a job that cannot sit and wait for them.
@@ -58,6 +61,12 @@ export interface FlowImageOptions {
   imageTarget?: Record<string, unknown>;
 }
 
+/** What a mission is asked to produce, and how to read back what it produced. */
+interface MissionKind<T> {
+  buildMission: (request: FlowImageRequest, options: FlowImageOptions, jobId: string) => BrowserTask;
+  decode: (downloads: MissionDownload[] | undefined) => Promise<T>;
+}
+
 type RunMap = Record<string, string>;
 
 function runMapOf(jobDoc: HydratedDocument<JobDoc>): RunMap {
@@ -66,31 +75,29 @@ function runMapOf(jobDoc: HydratedDocument<JobDoc>): RunMap {
 }
 
 /**
- * The images for this job, or a park.
+ * The results for this job, or a park.
  *
  * Enqueues a mission for every request that does not have one yet — so a job resumed after a
- * partial failure asks again only for what is missing, rather than redrawing what already landed.
+ * partial failure asks again only for what is missing, rather than redoing what already landed.
+ *
+ * Generic over what the mission produces, because a clip and a still differ only in the mission
+ * that is sent and the bytes that come back. Everything between — enqueue, park, survive a restart,
+ * collect, fail on a dead run — is the same problem, and having solved it twice would mean fixing
+ * every future bug in it twice.
  */
-export async function resolveFlowImages(
+async function resolveFlowMissions<T>(
   jobDoc: HydratedDocument<JobDoc>,
   requests: FlowImageRequest[],
-  options: FlowImageOptions = {},
-): Promise<Record<string, GeneratedImage>> {
+  options: FlowImageOptions,
+  kind: MissionKind<T>,
+): Promise<Record<string, T>> {
   const existing = runMapOf(jobDoc);
   const missing = requests.filter((r) => !existing[r.key]);
 
   if (missing.length > 0) {
     const started: RunMap = { ...existing };
     for (const request of missing) {
-      const mission = buildGoogleFlowImageMission({
-        taskId: "assigned-on-enqueue",
-        prompt: request.prompt,
-        referenceAssets: (request.referenceUrls ?? []).map((url) => ({ url })),
-        aspectRatio: options.aspectRatio,
-        projectId: options.projectId,
-        imageTarget: { ...options.imageTarget, jobId: jobDoc._id.toString(), key: request.key },
-      });
-
+      const mission = kind.buildMission(request, options, jobDoc._id.toString());
       const { runId } = await enqueueExtensionBrowserTask(jobDoc.userId, {
         providerId: mission.providerId,
         projectId: options.projectId,
@@ -123,9 +130,59 @@ export async function resolveFlowImages(
   const entries = await Promise.all(
     requests.map(async (request) => {
       const run = byId.get(existing[request.key]!);
-      const image = await imageFromMission({ downloads: run?.downloads as { path: string; url?: string }[] });
-      return [request.key, image] as const;
+      return [request.key, await kind.decode(run?.downloads as MissionDownload[] | undefined)] as const;
     }),
   );
   return Object.fromEntries(entries);
+}
+
+/** Stills, one mission per image — a character sheet is eight of them. */
+export async function resolveFlowImages(
+  jobDoc: HydratedDocument<JobDoc>,
+  requests: FlowImageRequest[],
+  options: FlowImageOptions = {},
+): Promise<Record<string, GeneratedImage>> {
+  return resolveFlowMissions(jobDoc, requests, options, {
+    buildMission: (request, opts, jobId) =>
+      buildGoogleFlowImageMission({
+        taskId: "assigned-on-enqueue",
+        prompt: request.prompt,
+        referenceAssets: (request.referenceUrls ?? []).map((url) => ({ url })),
+        aspectRatio: opts.aspectRatio,
+        projectId: opts.projectId,
+        imageTarget: { ...opts.imageTarget, jobId, key: request.key },
+      }),
+    decode: (downloads) => imageFromMission({ downloads }),
+  });
+}
+
+/**
+ * One scene's clip, drawn in the operator's own browser.
+ *
+ * The alternative route for video is Playwright on a worker, which needs a Chromium the host may
+ * not have and a CPU budget it may not have either — on a small instance a browser and an encoder
+ * compete with whatever else that process is serving. This one runs where the person already is,
+ * on hardware already paid for, and the server only ever handles the finished file.
+ *
+ * A single request keyed "video", because a scene has one clip. It goes through the same machinery
+ * as a sheet of eight stills for the reasons above.
+ */
+export async function resolveFlowVideo(
+  jobDoc: HydratedDocument<JobDoc>,
+  request: FlowImageRequest,
+  options: FlowImageOptions = {},
+): Promise<GeneratedVideo> {
+  const results = await resolveFlowMissions(jobDoc, [request], options, {
+    buildMission: (req, opts, jobId) =>
+      buildGoogleFlowVideoMission({
+        taskId: "assigned-on-enqueue",
+        prompt: req.prompt,
+        referenceAssets: (req.referenceUrls ?? []).map((url) => ({ url })),
+        aspectRatio: opts.aspectRatio,
+        projectId: opts.projectId,
+        videoTarget: { ...opts.imageTarget, jobId, key: req.key },
+      }),
+    decode: (downloads) => videoFromMission({ downloads }),
+  });
+  return results[request.key]!;
 }

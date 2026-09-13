@@ -20,15 +20,19 @@ export const maxDuration = 60;
  * path. `content-type` carries the media type (it decides the storage bucket) and `x-file-name`
  * the name, which is all the metadata a captured result has.
  *
- * ## The size ceiling is real
+ * ## The size ceiling, and why it moves
  *
- * A Vercel serverless function accepts about 4.5MB of request body, which is comfortable for the
- * stills this path exists for and too small for a long clip. That is why it is capped and says so
- * plainly: a mission that produces something too big should fail with a sentence an operator can
- * act on, not a platform error with no author. Video generation does not come through here — it
- * runs on the worker, where Playwright saves files to a disk the server owns.
+ * A Vercel serverless function accepts about 4.5MB of request body. That is comfortable for a still
+ * and too small for a clip — so the limit is the *host's*, not this route's, and it is configurable
+ * rather than baked in. A persistent Node process has no such platform ceiling and can take a whole
+ * scene's video; `EXTENSION_RESULT_MAX_MB` is how a deployment says which it is.
+ *
+ * The default stays 4MB, because the cost of guessing wrong in that direction is a clear error
+ * message, and the cost of guessing wrong in the other is a platform rejection with no author.
+ * Whatever the number, an oversized result fails with a sentence an operator can act on.
  */
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = Math.max(1, Number(process.env.EXTENSION_RESULT_MAX_MB ?? 4)) * 1024 * 1024;
+const LIMIT_LABEL = `${Math.round(MAX_BYTES / 1024 / 1024)}MB`;
 
 function fileNameFrom(request: Request): string {
   const raw = (request.headers.get("x-file-name") ?? "").trim();
@@ -48,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const declared = Number(request.headers.get("content-length") ?? 0);
     if (declared > MAX_BYTES) {
       return NextResponse.json(
-        { error: `This result is ${Math.round(declared / 1024 / 1024)}MB; the limit for a captured file is 4MB.` },
+        { error: `This result is ${Math.round(declared / 1024 / 1024)}MB; the limit for a captured file is ${LIMIT_LABEL}.` },
         { status: 413 },
       );
     }
@@ -56,7 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = Buffer.from(await request.arrayBuffer());
     if (body.byteLength === 0) return NextResponse.json({ error: "The request carried no bytes" }, { status: 400 });
     if (body.byteLength > MAX_BYTES) {
-      return NextResponse.json({ error: "The captured file is larger than the 4MB limit." }, { status: 413 });
+      return NextResponse.json({ error: `The captured file is larger than the ${LIMIT_LABEL} limit.` }, { status: 413 });
     }
 
     const download = await recordExtensionResult(id, {
