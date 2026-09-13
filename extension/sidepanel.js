@@ -5,12 +5,14 @@ async function load() {
     "apiBaseUrl",
     "extensionToken",
     "workerId",
+    "apiPrefix",
     "enabled",
     "aiFallbackEnabled",
     "geminiApiKey",
     "geminiModel",
   ]);
   $("apiBaseUrl").value = cfg.apiBaseUrl || "http://localhost:3000";
+  $("apiPrefix").value = cfg.apiPrefix || "/api";
   $("extensionToken").value = cfg.extensionToken || "";
   $("enabled").checked = cfg.enabled === true;
   $("aiFallbackEnabled").checked = cfg.aiFallbackEnabled === true;
@@ -35,6 +37,8 @@ $("save").addEventListener("click", async () => {
   }
   await chrome.storage.local.set({
     apiBaseUrl: $("apiBaseUrl").value.trim().replace(/\/$/, ""),
+    // Empty means "/api" — the studio standing on its own, which is the shape it shipped with.
+    apiPrefix: $("apiPrefix").value.trim() || "/api",
     extensionToken: $("extensionToken").value.trim(),
     enabled: $("enabled").checked,
     workerId,

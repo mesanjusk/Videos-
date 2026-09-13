@@ -20,6 +20,19 @@ Extension tasks use `executionTarget: "extension"` and are intentionally not ins
 
 ## Configuration
 
+Two fields decide where the extension talks to, because the studio now runs in two places:
+
+| Field | Standalone studio | Studio inside Metabsp |
+| --- | --- | --- |
+| Videos app URL | `https://your-app.vercel.app` | `https://metabsp.onrender.com` |
+| API path | `/api` | `/api/video` |
+
+Every endpoint below is built from those two. The studio used to own its whole URL space, so `/api`
+was a safe constant; ported into Metabsp it is one service among several and the same routes answer
+under `/api/video`. Getting this wrong looks like the extension polling quietly forever while every
+request 404s.
+
+
 Set a long random `BROWSER_EXTENSION_TOKEN` in the Videos deployment environment. Load this `/extension` directory as an unpacked Chrome extension, open its side panel, enter the Videos app base URL and the same token, then enable automatic claiming.
 
 Optional AI recovery can be enabled separately in the side panel. Add a Gemini API key and model only if you want last-resort selector recovery. If AI recovery is disabled or no key is configured, the extension remains fully deterministic and fails normally when all selectors fail.
