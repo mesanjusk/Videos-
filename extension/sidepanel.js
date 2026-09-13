@@ -42,6 +42,9 @@ $("save").addEventListener("click", async () => {
     geminiApiKey: $("geminiApiKey").value.trim(),
     geminiModel,
   });
+  // Tell the app at once: with claiming on, the Google Flow image route opens as soon as this
+  // lands, and with it off the route closes rather than waiting out the check-in's expiry.
+  await chrome.runtime.sendMessage({ type: "FLOW_RUNNER_ANNOUNCE" }).catch(() => {});
   $("geminiModel").value = geminiModel;
   $("status").textContent = `Saved. Worker: ${workerId}\n${$("enabled").checked ? "Automatic claiming enabled" : "Automatic claiming disabled"}\n${$("aiFallbackEnabled").checked && $("geminiApiKey").value.trim() ? `AI recovery enabled (${geminiModel})` : "AI recovery disabled"}`;
 });

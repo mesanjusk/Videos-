@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     marked: new Map<string, string>(),
     flowSession: { value: null as { accountId: string } | null },
+    extensionConnected: { value: false },
     geminiCredential: { value: "none" as "usable" | "unusable" | "none" },
     geminiProvider: { id: "gemini" },
     ideogramProvider: { id: "ideogram" },
@@ -46,6 +47,10 @@ vi.mock("@/modules/accounts/service", () => ({
   describePooledGeminiCredential: vi.fn(async () => mocks.geminiCredential.value),
 }));
 
+vi.mock("@/core/browser/extension-presence", () => ({
+  isExtensionConnected: vi.fn(async () => mocks.extensionConnected.value),
+}));
+
 vi.mock("./flow-image-step", () => ({
   resolveFlowImages: mocks.resolveFlowImages,
   FlowMissionPendingError: mocks.FlowMissionPendingError,
@@ -65,6 +70,7 @@ const spentAllowance = () => new ProviderQuotaExceededError("gemini", 30, { mode
 beforeEach(() => {
   mocks.marked.clear();
   mocks.flowSession.value = null;
+  mocks.extensionConnected.value = false;
   mocks.geminiCredential.value = "none";
   vi.clearAllMocks();
   process.env.GEMINI_API_KEY = "test-key";
@@ -273,5 +279,36 @@ describe("a dead end that has already been recorded", () => {
     await expect(
       routeImages(job, request(vi.fn().mockRejectedValue(zeroAllowance()))),
     ).rejects.toThrow(/boom/);
+  });
+});
+
+describe("what makes the browser route usable", () => {
+  it("opens the route for a connected extension, with no stored session anywhere", async () => {
+    // The barrier this removes: the route used to demand a Playwright storageState() blob that the
+    // extension never reads — it runs in the operator's own browser with their own Google login.
+    // Producing one takes Node, Playwright and a desktop, to satisfy a check about a credential
+    // nobody would use.
+    mocks.extensionConnected.value = true;
+    expect(await imageRouteCandidates("u1")).toContain("flow-browser");
+    expect((await imageRouteCandidates("u1"))[0]).toBe("flow-browser");
+  });
+
+  it("still opens the route for a stored session with no extension, for the Playwright runner", async () => {
+    mocks.flowSession.value = { accountId: "acc1" };
+    expect(await imageRouteCandidates("u1")).toContain("flow-browser");
+  });
+
+  it("keeps the route shut when neither runner is there", async () => {
+    // A mission with nothing to execute it parks the job forever, which is the failure this whole
+    // check exists to prevent.
+    expect(await imageRouteCandidates("u1")).not.toContain("flow-browser");
+  });
+
+  it("tells a stuck deployment to load the extension, not to export a session blob", async () => {
+    delete process.env.ENABLE_IDEOGRAM;
+
+    await expect(routeImages(job, request(vi.fn().mockRejectedValue(zeroAllowance())))).rejects.toThrow(
+      /load the Chrome extension/,
+    );
   });
 });

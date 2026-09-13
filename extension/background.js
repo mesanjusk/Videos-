@@ -22,16 +22,32 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create("videos-flow-poll", { periodInMinutes: 0.5 });
+  void announcePresence();
   void pollOnce();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "videos-flow-poll") void pollOnce();
+  if (alarm.name !== "videos-flow-poll") return;
+  // Announced before polling, and outside the one-mission-at-a-time guard below: a browser busy
+  // drawing an image stops claiming for minutes, and that is the last moment it should read as
+  // absent to the route deciding whether to send it work.
+  void announcePresence();
+  void pollOnce();
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Saving settings announces straight away, so switching claiming on opens the image route now
+  // rather than at the next alarm — and switching it off closes it now rather than in 90 seconds.
+  if (message?.type === "FLOW_RUNNER_ANNOUNCE") {
+    announcePresence().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message?.type === "FLOW_RUNNER_POLL_NOW") {
-    pollOnce().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    announcePresence()
+      .then(() => pollOnce())
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   return false;
@@ -56,6 +72,37 @@ async function api(path, options = {}) {
   });
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
   return response.json();
+}
+
+/**
+ * Tells the app this extension is connected and taking missions.
+ *
+ * This is what opens the Google Flow image route. It used to require a Playwright `storageState()`
+ * blob saved on the Accounts page — a credential this extension never reads, since it works in this
+ * browser with this browser's own Google login. A check-in says the true thing instead: something
+ * is here and will pick up a mission.
+ *
+ * Only while claiming is switched on, because that is the claim being made. Switching it off says
+ * so at once rather than leaving the app to wait out the expiry.
+ */
+async function announcePresence() {
+  const cfg = await config();
+  if (!cfg.extensionToken) return;
+
+  try {
+    if (cfg.enabled) {
+      await api("/api/browser-automation/extension/heartbeat", {
+        method: "POST",
+        body: JSON.stringify({ version: chrome.runtime.getManifest().version }),
+      });
+    } else {
+      await api("/api/browser-automation/extension/heartbeat", { method: "DELETE" });
+    }
+  } catch (error) {
+    // Nothing here is worth interrupting a run for: the next tick tries again, and the app's own
+    // expiry is what decides the extension is gone.
+    console.warn("[Videos Flow Runner] heartbeat failed", error.message);
+  }
 }
 
 async function pollOnce() {
