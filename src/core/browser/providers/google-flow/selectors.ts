@@ -8,11 +8,24 @@ export const FLOW_BASE_URL = "https://flow.google/";
 export const FLOW_SELECTORS = {
   loggedOutMarker: 'a[href*="accounts.google.com"], text=/sign in/i',
   verificationChallenge: 'text=/verify you.?re human/i, iframe[src*="recaptcha"], text=/unusual traffic/i',
-  newProjectButton: '[data-testid="new-project-button"], button:has-text("New project"), button:has-text("New Project")',
-  promptInput: '[data-testid="prompt-input"], textarea[placeholder*="Describe" i], [contenteditable="true"][role="textbox"]',
+  // "+ New project" is what Flow's home renders today (observed Aug 2026 in mesanjusk/Automation's
+  // driver), and it is a clickable card rather than a <button> — hence the role and text fallbacks.
+  newProjectButton:
+    '[data-testid="new-project-button"], button:has-text("New project"), [role="button"]:has-text("New project"), ' +
+    'text=/\\+?\\s*new project/i, text=/\\+?\\s*new video/i, text=/create a new project/i',
+  // Placeholder wording varies by surface ("Describe your idea", "Generate a video", "Ask Flow"),
+  // so the shape of the control is the first fallback and the wording the second.
+  promptInput:
+    '[data-testid="prompt-input"], textarea[placeholder*="Describe" i], textarea[placeholder*="idea" i], ' +
+    'textarea[placeholder*="video" i], [contenteditable="true"][role="textbox"], [role="textbox"], textarea',
   referenceUploadButton: '[data-testid="upload-reference"], button:has-text("Add image"), button:has-text("Upload")',
   referenceFileInput: 'input[type="file"]',
-  generateButton: '[data-testid="generate-button"], button:has-text("Generate"), button:has-text("Create")',
+  // `arrow_upward` is not a typo: Flow's submit is an icon button whose accessible text is the
+  // Material ligature. Automation's driver found it that way against the live product.
+  generateButton:
+    '[data-testid="generate-button"], button:has-text("Generate"), button:has-text("Create"), ' +
+    'button[type="submit"], [role="button"]:has-text("Generate"), text=/^generate( video)?$/i, ' +
+    'text=/^(send|submit|run)$/i, [aria-label*="arrow_upward" i], [aria-label*="Send" i]',
   renderingIndicator: '[data-testid="rendering-indicator"], text=/generating/i',
   resultVideo: '[data-testid="result-video"] video, video',
 
