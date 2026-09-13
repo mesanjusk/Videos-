@@ -104,3 +104,38 @@ describe("freshClipIds", () => {
     expect(freshClipIds(["blob:whatever"], undefined)).toEqual(["blob:whatever"]);
   });
 });
+
+describe("signals learned from the live product", () => {
+  // These come from mesanjusk/Automation's Flow driver, which ran against the real Flow. Each one
+  // is a run that would otherwise have waited out its full render timeout on a screen that was
+  // never going to change.
+  it("treats a spent generation allowance as a failure, not a slow render", () => {
+    expect(classifyFromSignals(signals({ text: "You've run out of generations this month" }))).toBe("ERROR");
+    expect(classifyFromSignals(signals({ text: "You are out of credits" }))).toBe("ERROR");
+  });
+
+  it("recognises a region block and a content refusal", () => {
+    expect(classifyFromSignals(signals({ text: "Flow is not available in your country yet" }))).toBe("ERROR");
+    expect(classifyFromSignals(signals({ text: "This request violates our content policy" }))).toBe("ERROR");
+  });
+
+  it("recognises Google's consent screen, not just accounts.google.com", () => {
+    expect(classifyFromSignals(signals({ url: "https://consent.google.com/m?continue=flow" }))).toBe("SIGNED_OUT");
+    expect(classifyFromSignals(signals({ url: "https://flow.google/o/oauth2/auth?client_id=x" }))).toBe("SIGNED_OUT");
+  });
+
+  it("reads Flow's own home tile", () => {
+    // Rendered as "+ New project", and as a clickable card rather than a button.
+    expect(classifyFromSignals(signals({ text: "+ New project" }))).toBe("WORKSPACE");
+  });
+
+  it("keeps waiting through every word Flow uses for 'working'", () => {
+    for (const text of ["Processing…", "Working on it", "Queued", "Please wait"]) {
+      expect(classifyFromSignals(signals({ text })), text).toBe("GENERATING");
+    }
+  });
+
+  it("takes Flow's own 'ready' wording as a finished clip", () => {
+    expect(classifyFromSignals(signals({ hasVideo: true, text: "Your video is ready · Generating" }))).toBe("CLIP_READY");
+  });
+});

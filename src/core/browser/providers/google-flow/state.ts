@@ -40,7 +40,11 @@ export type FlowScreen =
 
 /** Whether the page still says work is in progress. Shared by CLIP_READY and GENERATING. */
 function isBusy(p: PageSignals): boolean {
-  return /generating|rendering|creating your|this may take/i.test(p.text) || p.hasProgressbar;
+  return (
+    /generating|rendering|creating your|processing|working on it|in progress|queued|please wait|this (may|can|will) take/i.test(
+      p.text,
+    ) || p.hasProgressbar
+  );
 }
 
 /** Ordered most-specific first — the first matching signal wins. */
@@ -52,13 +56,24 @@ const SIGNALS: { screen: FlowScreen; test: (page: PageSignals) => boolean }[] = 
     screen: "CHALLENGE",
     test: (p) => /verify you.?re human|unusual traffic|confirm you.?re not a robot/i.test(p.text) || p.hasRecaptchaFrame,
   },
+  // The URL patterns and error strings below came from mesanjusk/Automation's Flow driver, which was
+  // developed against the live product — several of them are things you only learn by hitting them
+  // (a consent screen that is not accounts.google.com, running out of generations, a region block).
   {
     screen: "SIGNED_OUT",
-    test: (p) => /accounts\.google\.com/.test(p.url) || (/sign in|choose an account/i.test(p.text) && !p.hasPromptInput),
+    test: (p) =>
+      /accounts\.google\.com|consent\.google\.com|\/signin|\/ServiceLogin|\/AccountChooser|\/o\/oauth2\//i.test(p.url) ||
+      (/sign in|choose an account|use another account|verify it.?s you|couldn.?t sign you in|to continue to .*flow/i.test(p.text) &&
+        !p.hasPromptInput),
   },
   {
+    // Not only "it broke": a spent generation allowance, a region block and a content-policy refusal
+    // are all terminal for a run and all say so in their own words.
     screen: "ERROR",
-    test: (p) => /something went wrong|couldn.?t generate|generation failed|try again later/i.test(p.text),
+    test: (p) =>
+      /something went wrong|couldn.?t generate|generation failed|failed to generate|try again later|an error occurred/i.test(p.text) ||
+      /out of (credits|generations)|you.?(ve| have) (run out|reached)|rate limit|quota (exceeded|reached)/i.test(p.text) ||
+      /not available in your (country|region)|unable to (generate|complete)|content (policy|guidelines)/i.test(p.text),
   },
   // A finished clip, and it has to be tested before GENERATING: Flow keeps the "generating" label
   // on screen for a moment after the video appears.
@@ -73,10 +88,23 @@ const SIGNALS: { screen: FlowScreen; test: (page: PageSignals) => boolean }[] = 
   // claiming to be working is just as much a finished render. `isBusy` is what keeps that honest —
   // while the label or a progress bar is up, this stays GENERATING and keeps polling, which is the
   // one case where waiting is the right answer.
-  { screen: "CLIP_READY", test: (p) => p.hasVideo && (p.hasDownloadControl || !isBusy(p)) },
+  {
+    screen: "CLIP_READY",
+    test: (p) =>
+      p.hasVideo && (p.hasDownloadControl || /your video is ready|generation complete|add to scene/i.test(p.text) || !isBusy(p)),
+  },
   { screen: "GENERATING", test: isBusy },
   { screen: "PROMPT_READY", test: (p) => p.hasPromptInput },
-  { screen: "WORKSPACE", test: (p) => p.hasTimeline || /new project|your projects/i.test(p.text) },
+  {
+    // "+ New project" is what Flow's home actually renders (observed Aug 2026, per Automation's
+    // driver) — matching the words rather than a generated class name is what survives a redesign.
+    screen: "WORKSPACE",
+    test: (p) =>
+      p.hasTimeline ||
+      /\+?\s*new project|\+?\s*new video|create (a )?new project|untitled project|my projects|your projects|recent projects|flow tv/i.test(
+        p.text,
+      ),
+  },
   { screen: "LANDING", test: (p) => /flow|veo/i.test(p.title) },
 ];
 
