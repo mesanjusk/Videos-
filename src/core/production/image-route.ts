@@ -7,6 +7,7 @@ import { PROVIDER_METADATA, isProviderConfigured, GEMINI_REQUIREMENT } from "@/c
 import { markModelUnavailable, isModelUnavailable, unavailableReason, UNAVAILABLE_TTL_SECONDS } from "@/core/ai/provider-health";
 import { resolveFlowImages, FlowMissionPendingError, type FlowImageRequest, type FlowImageOptions } from "./flow-image-step";
 import { findAccountWithFlowSession, describePooledGeminiCredential } from "@/modules/accounts/service";
+import { isExtensionConnected } from "@/core/browser/extension-presence";
 
 /**
  * Which route draws an image, and what happens when it cannot.
@@ -47,15 +48,32 @@ export interface ImageRouteRequest {
  * Whether the browser route can actually run for this user.
  *
  * It declares no environment requirements — there is no key to set — so `isProviderConfigured` says
- * yes for every deployment, which would quietly make it the fallback everywhere. Without a
- * connected Flow session there is nothing to sign in as, the extension has no mission it can
- * execute, and the job would park forever waiting on one. That is precisely the failure that left
- * every video in this studio queued against a worker that did not exist; it is not worth repeating
- * one capability over.
+ * yes for every deployment, which would quietly make it the fallback everywhere. A mission enqueued
+ * with nothing to execute it parks the job forever; that is the failure that left every video in
+ * this studio queued against a worker that did not exist, and it is not worth repeating.
+ *
+ * ## What the question actually is
+ *
+ * "Will anything pick this mission up?" — and for a long time this asked something else. It checked
+ * for a stored Flow `storageState()` blob, then handed the work to the Chrome extension, which does
+ * not read that blob at all: it runs in the operator's own browser with the operator's own Google
+ * login. The stored session belongs to the Playwright runner on the worker.
+ *
+ * So the check was both wrong and expensive. Wrong, because a blob dumped weeks ago says nothing
+ * about whether anything is listening now. Expensive, because producing one takes Node, Playwright
+ * and a desktop — a barrier standing between "load the extension and log into Flow" and a working
+ * image pipeline, in service of a credential nobody would read.
+ *
+ * Either runner is a yes, because either can do the work: a connected extension (which says so
+ * itself, see core/browser/extension-presence.ts), or a stored session for Playwright. Neither is
+ * a yes on its own behalf — both are checked live, and both fail closed.
  */
 async function browserRouteUsable(userId: string): Promise<boolean> {
-  const account = await findAccountWithFlowSession(userId).catch(() => null);
-  return account !== null;
+  const [extension, account] = await Promise.all([
+    isExtensionConnected().catch(() => false),
+    findAccountWithFlowSession(userId).catch(() => null),
+  ]);
+  return extension || account !== null;
 }
 
 /**
@@ -63,14 +81,18 @@ async function browserRouteUsable(userId: string): Promise<boolean> {
  *
  * Every message here used to end at "enable billing, or switch provider in Settings", which quietly
  * omits the route this studio is actually built around: Flow draws images in a browser with no API
- * allowance involved at all. When no Flow session is connected, that is one setup step standing
- * between a stuck pipeline and a working one — the same step `core/production/progress.ts` already
- * puts a button on — and a failure message that does not mention it sends an operator to a billing
- * page they may not need.
+ * allowance involved at all. A failure message that does not mention it sends an operator to a
+ * billing page they may not need.
+ *
+ * It names the extension first because that is now the short path — load it, sign into Flow, switch
+ * claiming on — where it used to name the `storageState()` export, which needs a desktop and a
+ * Playwright install to produce and which the extension never reads. The stored session is still
+ * worth mentioning second: it is what the worker-driven video route runs on.
  */
 const FLOW_ROUTE_HINT =
-  " Google Flow can draw these in a browser instead, with no API allowance involved: connect a " +
-  "Google account's Flow browser session on the Accounts page to enable that route.";
+  " Google Flow can draw these in a browser instead, with no API allowance involved: load the Chrome " +
+  "extension, sign into Flow in that browser and switch claiming on, and this route opens by itself. " +
+  "(A connected Flow browser session on the Accounts page also enables it, for the worker-driven route.)";
 
 /** Never throws — an unreadable account pool reports "none", which sends the reader to the env var. */
 async function geminiCredentialState(userId: string): Promise<"usable" | "unusable" | "none"> {
@@ -105,7 +127,8 @@ async function explainNoImageRoute(userId: string): Promise<string> {
       "No image provider can serve this right now: every connected Google account is switched off or over the " +
       "quota recorded for it, and no other image route is configured. Reactivate an account in Account Manager, " +
       "wait for its quota to reset, or configure another route — ENABLE_IDEOGRAM (IDEOGRAM_API_KEY), " +
-      "ENABLE_LOCAL_AI (LOCAL_AI_IMAGE_URL), or connect a Flow browser session for the Google Flow route."
+      "ENABLE_LOCAL_AI (LOCAL_AI_IMAGE_URL), or the Google Flow browser route." +
+      ((await browserRouteUsable(userId)) ? "" : FLOW_ROUTE_HINT)
     );
   }
   return (

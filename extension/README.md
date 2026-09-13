@@ -34,6 +34,25 @@ POST already-planned scenes to:
 
 The route accepts `scenes`, optional `sharedAssets`, per-scene `referenceAssets`, `aspectRatio`, `language`, and `outputFileName`. It intentionally performs no Gemini call; planning stays upstream in the Videos production engine.
 
+## Staying connected
+
+The extension checks in every 30 seconds — on the same alarm that polls for work, and again the
+moment you save settings — with:
+
+`POST /api/browser-automation/extension/heartbeat`
+
+The app remembers that for 90 seconds. While the check-in is fresh, the Google Flow image route is
+open and image jobs are sent here; when it expires — Chrome closed, the laptop asleep, claiming
+switched off — the route closes again and jobs take another path instead of piling up against a
+browser that is not there. Switching claiming off sends a `DELETE` so that happens at once rather
+than 90 seconds later.
+
+This is what enables the Flow image route. It used to require a Playwright `storageState()` export
+saved on the Accounts page, which this extension never reads — it works in your browser, with your
+own Google login. Load the extension, sign into Flow in that browser, switch claiming on, and the
+route opens by itself. The stored session is still what the **worker-driven video** route runs on;
+that one is Playwright, not this.
+
 ## Returning the result
 
 A `capture_result` step is how a mission hands its output back. The content script fetches the
