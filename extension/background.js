@@ -1,5 +1,11 @@
 const DEFAULTS = {
   apiBaseUrl: "http://localhost:3000",
+  // Where this app's API lives under that origin.
+  //
+  // The studio used to own its whole URL space, so "/api" was a safe constant. It now also ships
+  // inside Metabsp as one service among several, where the same routes answer under "/api/video".
+  // One setting covers both, and anywhere else it is mounted later.
+  apiPrefix: "/api",
   extensionToken: "",
   workerId: `chrome-${crypto.randomUUID()}`,
   enabled: false,
@@ -58,10 +64,17 @@ async function config() {
   return { ...DEFAULTS, ...saved };
 }
 
-async function api(path, options = {}) {
+/** Joins the configured origin and API root with a route, tolerating stray slashes on either. */
+function endpoint(cfg, route) {
+  const origin = String(cfg.apiBaseUrl || "").replace(/\/$/, "");
+  const prefix = `/${String(cfg.apiPrefix ?? "/api").replace(/^\/+|\/+$/g, "")}`;
+  return `${origin}${prefix}${route}`;
+}
+
+async function api(route, options = {}) {
   const cfg = await config();
   if (!cfg.extensionToken) throw new Error("Extension token is not configured");
-  const response = await fetch(`${cfg.apiBaseUrl.replace(/\/$/, "")}${path}`, {
+  const response = await fetch(endpoint(cfg, route), {
     ...options,
     headers: {
       "content-type": "application/json",
@@ -91,12 +104,12 @@ async function announcePresence() {
 
   try {
     if (cfg.enabled) {
-      await api("/api/browser-automation/extension/heartbeat", {
+      await api("/browser-automation/extension/heartbeat", {
         method: "POST",
         body: JSON.stringify({ version: chrome.runtime.getManifest().version }),
       });
     } else {
-      await api("/api/browser-automation/extension/heartbeat", { method: "DELETE" });
+      await api("/browser-automation/extension/heartbeat", { method: "DELETE" });
     }
   } catch (error) {
     // Nothing here is worth interrupting a run for: the next tick tries again, and the app's own
@@ -111,7 +124,7 @@ async function pollOnce() {
   if (!cfg.enabled || !cfg.extensionToken) return;
   running = true;
   try {
-    const claimed = await api("/api/browser-automation/extension/tasks/claim", {
+    const claimed = await api("/browser-automation/extension/tasks/claim", {
       method: "POST",
       body: JSON.stringify({ providerId: "google-flow" }),
     });
@@ -124,7 +137,7 @@ async function pollOnce() {
 }
 
 async function report(taskId, stage, extra = {}) {
-  return api(`/api/browser-automation/extension/tasks/${taskId}/status`, {
+  return api(`/browser-automation/extension/tasks/${taskId}/status`, {
     method: "POST",
     body: JSON.stringify({ stage, ...extra }),
   });
@@ -533,7 +546,7 @@ async function captureResult(taskId, tabId, step, timeoutMs) {
   if (size !== begin.size) throw new Error(`Captured ${size} bytes but the page reported ${begin.size}`);
 
   const fileName = step.params.fileName || `flow-result-${Date.now()}`;
-  const stored = await api(`/api/browser-automation/extension/tasks/${taskId}/result`, {
+  const stored = await api(`/browser-automation/extension/tasks/${taskId}/result`, {
     method: "POST",
     headers: { "content-type": begin.mimeType || "application/octet-stream", "x-file-name": fileName },
     body: new Blob(parts, { type: begin.mimeType || "application/octet-stream" }),

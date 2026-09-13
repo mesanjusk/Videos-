@@ -12,7 +12,9 @@
   <p class="muted">Structured Flow tasks stay primary. Gemini is used only when a planned selector/action fails and AI recovery is enabled.</p>
 
   <label>Videos app URL</label>
-  <input id="apiBaseUrl" placeholder="https://your-videos-app.vercel.app" />
+  <input id="apiBaseUrl" placeholder="https://your-app.onrender.com" />
+  <label>API path <span class="muted">— "/api/video" when the studio runs inside Metabsp, "/api" on its own</span></label>
+  <input id="apiPrefix" placeholder="/api" />
   <label>Extension token</label>
   <input id="extensionToken" type="password" autocomplete="off" />
   <label><input id="enabled" type="checkbox" style="width:auto" /> Enable automatic task claiming</label>
